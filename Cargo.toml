@@ -1,0 +1,30 @@
+[package]
+name = "mirror-clone"
+version = "0.1.0"
+authors = ["Alex Chi <iskyzh@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "0.2", features = ["full"] }
+reqwest = { version = "0.10", features = ["rustls-tls", "stream"] }
+overlay = { path = "./overlay" }
+log = "0.4"
+async-log = "2.0"
+femme = "1.2"
+futures-util = "0.3"
+flate2 = "1.0"
+tar = "0.4"
+bytes = "0.6"
+regex = "1"
+indicatif = "0.15"
+futures = "0.3"
+futures-retry = "0.5"
+thiserror = "1.0"
+rand = "0.7"
+
+[workspace]
+members = [
+    "overlay"
+]
