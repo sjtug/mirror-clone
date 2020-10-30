@@ -2,6 +2,33 @@
 
 An all-in-one mirror utility
 
+## Motivation
+
+The observation is that, software registeries follow nearly the same design. They
+have an index to store all packages, they use checksums to verify if package is
+corrupted. And for mirror utility developers, they also share a lot of components
+when building a mirroring tool. They need to extract tarballs, parse configs,
+support multi-thread downloads, verify integrity, etc.
+
+mirror-clone is built to simplify how we build a mirror utility. By providing
+a large set of reuseble functions, developers could port mirror-clone to a new
+mirror very fast. By using the Rust programming language, we could also mirror
+software registery faster, while making the utility robust.
+
+
+## Roadmap
+
+- Repo
+    - [x] OPAM support
+    - [ ] Conda support
+- Functionalities
+    - [x] Download
+    - [x] Concurrent control
+    - [ ] Multi-thread executor
+    - [ ] Easy-to-use macro and interface
+    - [ ] Checksum verification
+    - [ ] HTTP error handling
+
 ## Overlay Filesystem
 
 All files downloaded could be tracked by the "overlay filesystem".
