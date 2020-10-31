@@ -14,7 +14,7 @@ fn create_logger() -> slog::Logger {
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build();
-    let drain = LevelFilter::new(drain, Level::Debug).fuse();
+    let drain = LevelFilter::new(drain, Level::Trace).fuse();
     slog::Logger::root(drain, o!())
 }
 

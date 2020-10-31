@@ -58,10 +58,11 @@ pub async fn download_and_check_hash(
     url: String,
     checksum: (String, String),
 ) -> Result<()> {
-    info!("begin download");
+    debug!("begin download");
     download_to_file(client, url, &mut file).await?;
     verify_checksum(&mut file, checksum.0, checksum.1).await?;
     file.commit().await?;
+    info!("downloaded");
     Ok(())
 }
 

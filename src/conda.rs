@@ -68,7 +68,7 @@ impl Conda {
 
         info!("{} packages to download", packages_to_download.len());
 
-        // let progress = ProgressBar::new(all_packages.len() as u64);
+        // let progress = ProgressBar::new(packages_to_download.len() as u64);
         let progress = ProgressBar::hidden();
 
         let file_list = packages_to_download
