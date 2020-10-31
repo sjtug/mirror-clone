@@ -27,6 +27,7 @@ software registery faster, while making the utility robust.
   - [ ] Easy-to-use macro and interface
   - [x] Checksum verification
   - [x] HTTP error handling
+  - [ ] Multi-thread checksum
 
 ## Features
 
