@@ -21,6 +21,8 @@ pub enum Error {
     },
     #[error("HTTP Error {0}")]
     HTTPError(reqwest::StatusCode),
+    #[error("JSON Decode Error {0}")]
+    JsonDecodeError(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

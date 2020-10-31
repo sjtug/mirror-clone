@@ -1,8 +1,14 @@
+use super::download_to_file;
+use futures::lock::Mutex;
 use futures::Future;
 use futures_retry::{ErrorHandler, FutureFactory, FutureRetry, RetryPolicy};
 use reqwest::StatusCode;
 use slog_scope::warn;
+use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
+
+use overlay::{OverlayDirectory, OverlayFile};
 
 use crate::error::{Error, Result};
 
@@ -93,4 +99,29 @@ pub async fn retry<FF: FutureFactory<FutureItem = F>, F: Future<Output = Result<
             Err(err)
         }
     }
+}
+
+pub async fn retry_download(
+    client: reqwest::Client,
+    base: Arc<Mutex<OverlayDirectory>>,
+    url: String,
+    path: impl AsRef<Path>,
+    times: usize,
+    msg: impl AsRef<str>,
+) -> Result<OverlayFile> {
+    let path = path.as_ref().to_owned();
+    Ok(retry(
+        || async {
+            let mut repo_file = base
+                .lock()
+                .await
+                .create_file_for_write(path.clone())
+                .await?;
+            download_to_file(client.clone(), url.clone(), &mut repo_file).await?;
+            Ok(repo_file)
+        },
+        times,
+        msg.as_ref().to_string(),
+    )
+    .await?)
 }
