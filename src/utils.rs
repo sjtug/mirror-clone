@@ -57,7 +57,6 @@ pub async fn download_and_check_hash(
     mut file: OverlayFile,
     url: String,
     checksum: (String, String),
-    
 ) -> Result<()> {
     info!("begin download");
     download_to_file(client, url, &mut file).await?;
