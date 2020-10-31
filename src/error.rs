@@ -12,6 +12,14 @@ pub enum Error {
     RegexError(#[from] regex::Error),
     #[error("Mock Error {0}")]
     MockError(String),
+    #[error("Checksum Error {checksum_type} expected {expected}, get {checksum}")]
+    ChecksumError {
+        checksum_type: String,
+        expected: String,
+        checksum: String,
+    },
+    #[error("HTTP Error {0}")]
+    HTTPError(reqwest::StatusCode),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

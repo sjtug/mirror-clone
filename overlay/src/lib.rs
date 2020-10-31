@@ -66,6 +66,11 @@ impl OverlayDirectory {
         .boxed()
     }
 
+    pub async fn add_to_overlay<P: AsRef<Path>>(&self, path: P) -> Result<bool, io::Error> {
+        let path = self.base_path.join(path);
+        Ok(path.exists())
+    }
+
     pub async fn create_file_for_write<P: AsRef<Path>>(
         &self,
         path: P,

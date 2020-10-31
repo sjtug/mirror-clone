@@ -3,20 +3,23 @@ mod opam;
 mod tar;
 mod utils;
 
-use async_log::span;
+use slog::{o, Drain, Level, LevelFilter};
+use slog_scope_futures::FutureExt;
 use std::path::PathBuf;
 
-fn setup_logger() {
-    let logger = femme::pretty::Logger::new();
-    async_log::Logger::wrap(logger, || 12)
-        .start(log::LevelFilter::Info)
-        .unwrap();
+use crate::error::Result;
+
+fn create_logger() -> slog::Logger {
+    let decorator = slog_term::TermDecorator::new().build();
+    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+    let drain = slog_async::Async::new(drain).build();
+    let drain = LevelFilter::new(drain, Level::Warning).fuse();
+    let log = slog::Logger::root(drain, o!());
+    log
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    setup_logger();
-
+async fn main() -> Result<()> {
     let task = opam::Opam {
         base_path: PathBuf::from("/srv/data/opam"),
         repo: "http://localhost".to_string(),
@@ -24,8 +27,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         debug_mode: false,
         concurrent_downloads: 16,
     };
-    span!("opam", {
-        task.run().await?;
-    });
+    let _guard = slog_scope::set_global_logger(create_logger());
+    task.run()
+        .with_logger(&slog_scope::logger().new(o!("task" => "opam")))
+        .await?;
     Ok(())
 }

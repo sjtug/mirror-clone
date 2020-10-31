@@ -15,21 +15,25 @@ a large set of reuseble functions, developers could port mirror-clone to a new
 mirror very fast. By using the Rust programming language, we could also mirror
 software registery faster, while making the utility robust.
 
-
 ## Roadmap
 
 - Repo
-    - [x] OPAM support
-    - [ ] Conda support
+  - [x] OPAM support
+  - [ ] Conda support
 - Functionalities
-    - [x] Download
-    - [x] Concurrent control
-    - [ ] Multi-thread executor
-    - [ ] Easy-to-use macro and interface
-    - [ ] Checksum verification
-    - [ ] HTTP error handling
+  - [x] Download
+  - [x] Concurrent control
+  - [ ] Multi-thread executor
+  - [ ] Easy-to-use macro and interface
+  - [x] Checksum verification
+  - [x] HTTP error handling
 
-## Overlay Filesystem
+## Features
+
+### Overlay Filesystem
+
+The basis of mirror-clone is a virtual "overlay filesystem", that maintains a working
+"snapshot" of software registery on disk.
 
 All files downloaded could be tracked by the "overlay filesystem".
 The filesystem will automatically resolve dependencies between files
@@ -56,3 +60,15 @@ in_release.commit().await?;
 When file is being downloaded, it will be written to `<filename>.<rand>.tmp`.
 When committing file, it will be renamed to `<filename>`. When overlay file is dropped
 in Rust, it will be removed.
+
+### Unified Logging Interface
+
+All tasks in mirror-clone use the same logging interface. Logs could be easily parsed
+and processed by existing tools.
+
+### Managed Download
+
+**Auto Retry.** It's normal that packages could not be downloaded because of network error.
+mirror-clone automatically handles HTTP errors and retries the requests.
+
+**Auto Pipelining.** mirror-clone automatically scales number of concurrent downloads.
