@@ -4,6 +4,7 @@ use indicatif::ProgressBar;
 use itertools::Itertools;
 use overlay::{OverlayDirectory, OverlayFile};
 use regex::Regex;
+use serde_json::Value as JsonValue;
 use slog::o;
 use slog_scope::{debug, info, warn};
 use slog_scope_futures::FutureExt;
@@ -13,7 +14,7 @@ use std::sync::Arc;
 
 use crate::error::Result;
 use crate::tar::tar_gz_entries;
-use crate::utils::{content_of, download_to_file, retry, verify_checksum};
+use crate::utils::{content_of, parallel_download_files, retry_download, DownloadTask};
 
 pub struct Conda {
     pub repo: String,
@@ -22,108 +23,100 @@ pub struct Conda {
     pub concurrent_downloads: usize,
 }
 
+fn parse_index(data: &[u8]) -> Result<Vec<(String, String, String)>> {
+    let v: JsonValue = serde_json::from_slice(data)?;
+    let mut result = vec![];
+
+    let package_mapper = |(key, value): (&String, &JsonValue)| -> (String, String, String) {
+        (
+            key.clone(),
+            "sha256".to_string(),
+            value["sha256"].as_str().unwrap().to_string(),
+        )
+    };
+
+    if let Some(JsonValue::Object(map)) = v.get("packages") {
+        result.append(&mut map.iter().map(package_mapper).collect());
+    }
+    if let Some(JsonValue::Object(map)) = v.get("packages.conda") {
+        result.append(&mut map.iter().map(package_mapper).collect());
+    }
+
+    Ok(result)
+}
+
 impl Conda {
     pub async fn run(&self) -> Result<()> {
         let base = OverlayDirectory::new(&self.base_path).await?;
         let base = Arc::new(Mutex::new(base));
         let client = reqwest::Client::new();
 
-        info!("download repo file");
-
-        let repo_file = retry(
-            || async {
-                let mut repo_file = base.lock().await.create_file_for_write("repo").await?;
-                download_to_file(
-                    client.clone(),
-                    format!("{}/repo", self.repo),
-                    &mut repo_file,
-                )
-                .await?;
-                Ok(repo_file)
-            },
-            5,
-            "download repo file".to_string(),
-        )
-        .await?;
-
         info!("download repo index");
-        let (index, index_content) = retry(
-            || async {
-                let mut index = base
-                    .lock()
-                    .await
-                    .create_file_for_write("index.tar.gz")
-                    .await?;
-                let index_content = content_of(
-                    client.clone(),
-                    format!("{}/index.tar.gz", self.repo),
-                    &mut index,
-                )
-                .await?;
-                Ok((index, index_content))
-            },
+
+        let mut index = retry_download(
+            client.clone(),
+            base.clone(),
+            format!("{}/repodata.json", self.repo),
+            "repodata.json",
             5,
-            "download repo index".to_string(),
+            "download repo file",
         )
         .await?;
 
-        info!("parse repo index");
-        let all_packages = parse_index_content(index_content, self.debug_mode)?;
-        let original_length = all_packages.len();
-        let all_packages: Vec<(String, String, String)> = all_packages
-            .into_iter()
-            .unique_by(|s| (s.1.clone(), s.2.clone()))
-            .collect();
-        let filtered_length = original_length - all_packages.len();
-        if filtered_length != 0 {
-            warn!("filtered {} duplicated packages", filtered_length);
-        }
+        let index_content = content_of(&mut index).await?;
+
+        let packages_to_download = parse_index(&index_content)?;
+
+        info!("{} packages to download", packages_to_download.len());
 
         // let progress = ProgressBar::new(all_packages.len() as u64);
         let progress = ProgressBar::hidden();
 
-        let mut fetches =
-            futures::stream::iter(all_packages.into_iter().map(|(name, hash_type, hash)| {
-                let name_logger = name;
-                let base = base.clone();
-                let cache_path = format!("{}/{}/{}", hash_type, &hash[..2], hash);
-                let client = client.clone();
-                async move {
-                    retry(
-                        || async {
-                            let base = base.lock().await;
-                            let download_path = format!("archive/{}", cache_path.clone());
-                            if base.add_to_overlay(&download_path).await? {
-                                debug!("skip, already exists");
-                                return Ok(());
-                            }
-                            let file = base.create_file_for_write(download_path).await?;
-                            drop(base);
-                            download_by_hash(
-                                client.clone(),
-                                file,
-                                self.archive_url.clone(),
-                                cache_path.clone(),
-                                (hash_type.clone(), hash.clone()),
-                            )
-                            .await?;
-                            Ok(())
-                        },
-                        5,
-                        "download file".to_string(),
-                    )
-                    .await
-                }
-                .with_logger(slog_scope::logger().new(o!("package" => name_logger)))
-            }))
-            .buffer_unordered(self.concurrent_downloads);
+        let file_list = packages_to_download
+            .into_iter()
+            .map(|(pkg, hash_type, hash)| {
+                let mut path = self.base_path.clone();
+                path.push(&pkg);
 
-        while fetches.next().await.is_some() {
-            progress.inc(1);
+                DownloadTask {
+                    name: pkg.clone(),
+                    url: format!("{}/{}", self.repo, pkg),
+                    path,
+                    hash_type,
+                    hash,
+                }
+            })
+            .collect::<Vec<DownloadTask>>();
+
+        parallel_download_files(
+            client.clone(),
+            base.clone(),
+            file_list,
+            5,
+            self.concurrent_downloads,
+            || progress.inc(1),
+        )
+        .await;
+
+        for filename in &["repodata.json.bz2", "current_repodata.json"] {
+            info!("download extra repo index {}", filename);
+
+            let file = retry_download(
+                client.clone(),
+                base.clone(),
+                format!("{}/{}", self.repo, filename),
+                filename,
+                5,
+                format!("download {}", filename),
+            )
+            .await;
+
+            if let Ok(file) = file {
+                file.commit().await?;
+            }
         }
 
         index.commit().await?;
-        repo_file.commit().await?;
         Ok(())
     }
 }

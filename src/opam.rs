@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use crate::error::Result;
 use crate::tar::tar_gz_entries;
-use crate::utils::{content_of, download_to_file, retry, verify_checksum};
+use crate::utils::{content_of, download_to_file, retry, retry_download, verify_checksum};
 
 pub struct Opam {
     pub repo: String,
@@ -87,42 +87,28 @@ impl Opam {
 
         info!("download repo file");
 
-        let repo_file = retry(
-            || async {
-                let mut repo_file = base.lock().await.create_file_for_write("repo").await?;
-                download_to_file(
-                    client.clone(),
-                    format!("{}/repo", self.repo),
-                    &mut repo_file,
-                )
-                .await?;
-                Ok(repo_file)
-            },
+        let repo_file = retry_download(
+            client.clone(),
+            base.clone(),
+            format!("{}/repo", self.repo),
+            "repo",
             5,
-            "download repo file".to_string(),
+            "download repo file",
         )
         .await?;
 
         info!("download repo index");
-        let (index, index_content) = retry(
-            || async {
-                let mut index = base
-                    .lock()
-                    .await
-                    .create_file_for_write("index.tar.gz")
-                    .await?;
-                let index_content = content_of(
-                    client.clone(),
-                    format!("{}/index.tar.gz", self.repo),
-                    &mut index,
-                )
-                .await?;
-                Ok((index, index_content))
-            },
+        let mut index = retry_download(
+            client.clone(),
+            base.clone(),
+            format!("{}/index.tar.gz", self.repo),
+            "index.tar.gz",
             5,
-            "download repo index".to_string(),
+            "download repo index",
         )
         .await?;
+
+        let index_content = content_of(&mut index).await?;
 
         info!("parse repo index");
         let all_packages = parse_index_content(index_content, self.debug_mode)?;

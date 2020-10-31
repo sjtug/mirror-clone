@@ -816,6 +816,7 @@ dependencies = [
  "rand 0.7.3",
  "regex",
  "reqwest",
+ "serde_json",
  "sha-1",
  "sha2",
  "slog",
