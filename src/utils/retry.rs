@@ -4,7 +4,7 @@ use futures::Future;
 use futures_retry::{ErrorHandler, FutureFactory, FutureRetry, RetryPolicy};
 use reqwest::StatusCode;
 use slog_scope::warn;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 

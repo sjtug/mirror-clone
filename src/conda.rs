@@ -1,19 +1,18 @@
 use futures::lock::Mutex;
 use futures::StreamExt;
 use indicatif::ProgressBar;
-use itertools::Itertools;
-use overlay::{OverlayDirectory, OverlayFile};
-use regex::Regex;
+
+use overlay::OverlayDirectory;
+
 use serde_json::Value as JsonValue;
-use slog::o;
+
 use slog_scope::{debug, info, warn};
-use slog_scope_futures::FutureExt;
-use std::io::Read;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::error::Result;
-use crate::tar::tar_gz_entries;
+
 use crate::utils::{content_of, parallel_download_files, retry_download, DownloadTask};
 
 pub struct Conda {

@@ -6,7 +6,7 @@ use futures_util::StreamExt;
 use overlay::{OverlayDirectory, OverlayFile};
 use reqwest::Client;
 use slog::o;
-use slog_scope::{debug, info, warn};
+use slog_scope::{debug, info};
 use slog_scope_futures::FutureExt;
 use std::path::PathBuf;
 use std::sync::Arc;
