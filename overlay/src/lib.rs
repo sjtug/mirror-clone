@@ -98,7 +98,7 @@ pub struct OverlayFile {
     pub file: Option<File>,
 }
 
-const TMP_FILE_SUFFIX: &'static str = ".tmp";
+const TMP_FILE_SUFFIX: &str = ".tmp";
 
 impl OverlayFile {
     pub async fn create_for_write<P: AsRef<Path>>(
