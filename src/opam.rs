@@ -4,9 +4,9 @@ use indicatif::ProgressBar;
 use itertools::Itertools;
 use overlay::{OverlayDirectory, OverlayFile};
 use regex::Regex;
-use slog::o;
-use slog_scope::{debug, info, warn};
-use slog_scope_futures::FutureExt;
+
+use slog_scope::{info, warn};
+
 use std::collections::HashSet;
 use std::io::Read;
 use std::iter::FromIterator;
@@ -16,7 +16,7 @@ use std::sync::Arc;
 use crate::error::Result;
 use crate::tar::tar_gz_entries;
 use crate::utils::{
-    content_of, download_to_file, parallel_download_files, retry, retry_download, verify_checksum,
+    content_of, download_to_file, parallel_download_files, retry_download, verify_checksum,
     DownloadTask,
 };
 
