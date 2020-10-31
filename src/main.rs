@@ -14,8 +14,7 @@ fn create_logger() -> slog::Logger {
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build();
     let drain = LevelFilter::new(drain, Level::Warning).fuse();
-    let log = slog::Logger::root(drain, o!());
-    log
+    slog::Logger::root(drain, o!())
 }
 
 #[tokio::main]

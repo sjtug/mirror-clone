@@ -44,7 +44,7 @@ fn parse_index_content(
             data.clear();
             entry.read_to_end(&mut data)?;
             let mut cnt = 0;
-            let name = path_str.split("/").collect::<Vec<&str>>()[2].to_string();
+            let name = path_str.split('/').collect::<Vec<&str>>()[2].to_string();
             // only read data after "checksum" field
             let data = std::str::from_utf8(&data)?
                 .split("checksum")
@@ -141,7 +141,7 @@ impl Opam {
 
         let mut fetches =
             futures::stream::iter(all_packages.into_iter().map(|(name, hash_type, hash)| {
-                let name_logger = name.clone();
+                let name_logger = name;
                 let base = base.clone();
                 let cache_path = format!("{}/{}/{}", hash_type, &hash[..2], hash);
                 let client = client.clone();
@@ -175,7 +175,7 @@ impl Opam {
             }))
             .buffer_unordered(self.concurrent_downloads);
 
-        while let Some(_) = fetches.next().await {
+        while fetches.next().await.is_some() {
             progress.inc(1);
         }
 

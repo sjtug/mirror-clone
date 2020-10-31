@@ -76,7 +76,7 @@ where
             }
         }
 
-        return RetryPolicy::ForwardError(e);
+        RetryPolicy::ForwardError(e)
     }
 }
 

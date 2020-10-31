@@ -11,6 +11,7 @@ pub enum Error {
     #[error("Regex Error {0}")]
     RegexError(#[from] regex::Error),
     #[error("Mock Error {0}")]
+    #[allow(unused)]
     MockError(String),
     #[error("Checksum Error {checksum_type} expected {expected}, get {checksum}")]
     ChecksumError {
