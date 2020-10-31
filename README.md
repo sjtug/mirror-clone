@@ -19,7 +19,10 @@ software registery faster, while making the utility robust.
 
 - Repo
   - [x] OPAM support
-  - [ ] Conda support
+  - [x] Conda support
+  - [ ] rust-static support
+  - [ ] static.crates.io support
+  - [ ] apt support
 - Functionalities
   - [x] Download
   - [x] Concurrent control
