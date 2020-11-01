@@ -58,7 +58,7 @@ pub async fn download_and_check_hash(
     url: String,
     checksum: (String, String),
 ) -> Result<()> {
-    debug!("begin download");
+    debug!("begin download {} to {}", url, file.path.to_string_lossy());
     download_to_file(client, url, &mut file).await?;
     verify_checksum(&mut file, checksum.0, checksum.1).await?;
     file.commit().await?;
@@ -66,6 +66,7 @@ pub async fn download_and_check_hash(
     Ok(())
 }
 
+#[derive(Clone, Debug)]
 pub struct DownloadTask {
     pub name: String,
     pub url: String,
@@ -80,48 +81,48 @@ pub async fn parallel_download_files(
     file_list: Vec<DownloadTask>,
     retry_times: usize,
     concurrent_downloads: usize,
-    on_new_item: impl Fn() -> (),
+    mut on_new_item: impl FnMut(DownloadTask, Result<()>) -> (),
 ) {
-    let mut fetches = futures::stream::iter(file_list.into_iter().map(
-        |DownloadTask {
-             name,
-             url,
-             path,
-             hash_type,
-             hash,
-         }| {
-            let base = base.clone();
-            let client = client.clone();
-            async move {
-                retry(
-                    || async {
-                        let base = base.lock().await;
-                        if base.add_to_overlay(&path).await? {
-                            debug!("skip, already exists");
-                            return Ok(());
-                        }
-                        let file = base.create_file_for_write(&path).await?;
-                        drop(base);
-                        download_and_check_hash(
-                            client.clone(),
-                            file,
-                            url.clone(),
-                            (hash_type.clone(), hash.clone()),
-                        )
-                        .await?;
-                        Ok(())
-                    },
-                    retry_times,
-                    "download file".to_string(),
-                )
-                .await
-            }
-            .with_logger(slog_scope::logger().new(o!("package" => name)))
-        },
-    ))
+    let mut fetches = futures::stream::iter(file_list.into_iter().map(|task| {
+        let DownloadTask {
+            name,
+            url,
+            path,
+            hash_type,
+            hash,
+        } = task.clone();
+        let base = base.clone();
+        let client = client.clone();
+        async move {
+            let result = retry(
+                || async {
+                    let base = base.lock().await;
+                    if base.try_fuse(&path).await? {
+                        debug!("skip, already exists");
+                        return Ok(());
+                    }
+                    let file = base.create_file_for_write(&path).await?;
+                    drop(base);
+                    download_and_check_hash(
+                        client.clone(),
+                        file,
+                        url.clone(),
+                        (hash_type.clone(), hash.clone()),
+                    )
+                    .await?;
+                    Ok(())
+                },
+                retry_times,
+                "download file".to_string(),
+            )
+            .await;
+            (task, result)
+        }
+        .with_logger(slog_scope::logger().new(o!("package" => name)))
+    }))
     .buffer_unordered(concurrent_downloads);
 
-    while fetches.next().await.is_some() {
-        on_new_item();
+    while let Some(task) = fetches.next().await {
+        on_new_item(task.0, task.1);
     }
 }

@@ -4,16 +4,21 @@ use indicatif::ProgressBar;
 use itertools::Itertools;
 use overlay::{OverlayDirectory, OverlayFile};
 use regex::Regex;
-use slog::o;
-use slog_scope::{debug, info, warn};
-use slog_scope_futures::FutureExt;
+
+use slog_scope::{info, warn};
+
+use std::collections::HashSet;
 use std::io::Read;
+use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::error::Result;
 use crate::tar::tar_gz_entries;
-use crate::utils::{content_of, download_to_file, retry, retry_download, verify_checksum};
+use crate::utils::{
+    content_of, download_to_file, parallel_download_files, retry_download, verify_checksum,
+    DownloadTask,
+};
 
 pub struct Opam {
     pub repo: String,
@@ -21,19 +26,29 @@ pub struct Opam {
     pub archive_url: String,
     pub debug_mode: bool,
     pub concurrent_downloads: usize,
+    pub fetch_from_cache: bool,
+}
+
+#[derive(Clone)]
+pub struct OpamDownloadTask {
+    name: String,
+    src: String,
+    hashes: Vec<(String, String)>,
 }
 
 fn parse_index_content(
     index_content: Vec<u8>,
     limit_entries: bool,
-) -> Result<Vec<(String, String, String)>> {
-    let mut data = Vec::new();
+) -> Result<Vec<OpamDownloadTask>> {
+    let mut buf = Vec::new();
     let mut result = Vec::new();
-    let opam_parser = Regex::new(r#""(md5|sha256|sha512)=(.*)""#)?;
+    let opam_parser = Regex::new(r#""(md5|sha1|sha256|sha512)=(.*)""#)?;
+    let string_finder = Regex::new(r#""(.*)""#)?;
+
     let mut entries = tar_gz_entries(&index_content);
     let tar_gz_iterator = entries.entries()?;
     for (idx, entry) in tar_gz_iterator.enumerate() {
-        if limit_entries && idx >= 100 {
+        if limit_entries && idx >= 2000 {
             break;
         }
 
@@ -41,27 +56,45 @@ fn parse_index_content(
         let path = entry.path()?.into_owned();
         let path_str = path.to_string_lossy().to_string();
         if path_str.ends_with("/opam") {
-            data.clear();
-            entry.read_to_end(&mut data)?;
-            let mut cnt = 0;
+            let mut hashes = vec![];
+            buf.clear();
+            entry.read_to_end(&mut buf)?;
+
             let name = path_str.split('/').collect::<Vec<&str>>()[2].to_string();
-            // only read data after "checksum" field
-            let data = std::str::from_utf8(&data)?
-                .split("checksum")
+            // only read data after last "src" field
+            let data = std::str::from_utf8(&buf)?
+                .split("src:")
                 .collect::<Vec<&str>>();
-            if let Some(data) = data.get(1) {
-                for capture in opam_parser.captures_iter(data) {
-                    result.push((name.clone(), capture[1].to_owned(), capture[2].to_owned()));
-                    cnt += 1;
+            let mut src = String::new();
+            if let Some(data) = data.last() {
+                if let Some(capture) = string_finder.captures_iter(data).next() {
+                    src = capture[1].to_string();
+                }
+
+                // only read data after "checksum" field
+                let data = data.split("checksum").collect::<Vec<&str>>();
+
+                if let Some(data) = data.get(1) {
+                    for capture in opam_parser.captures_iter(data) {
+                        hashes.push((capture[1].to_string(), capture[2].to_string()));
+                    }
                 }
             }
-            if cnt == 0 {
+            if hashes.is_empty() {
                 warn!("no checksum found in {}", name);
+            } else if src == "" {
+                warn!("no src found in {}", name);
+            } else {
+                result.push(OpamDownloadTask { name, src, hashes })
             }
         }
     }
 
     Ok(result)
+}
+
+fn build_hash_url(hash_type: &str, hash: &str) -> String {
+    format!("{}/{}/{}", hash_type, &hash[..2], hash)
 }
 
 async fn download_by_hash(
@@ -112,61 +145,98 @@ impl Opam {
 
         info!("parse repo index");
         let all_packages = parse_index_content(index_content, self.debug_mode)?;
-        let original_length = all_packages.len();
-        let all_packages: Vec<(String, String, String)> = all_packages
-            .into_iter()
-            .unique_by(|s| (s.1.clone(), s.2.clone()))
-            .collect();
-        let filtered_length = original_length - all_packages.len();
-        if filtered_length != 0 {
-            warn!("filtered {} duplicated packages", filtered_length);
-        }
 
-        // let progress = ProgressBar::new(all_packages.len() as u64);
-        let progress = ProgressBar::hidden();
+        let progress = ProgressBar::new(all_packages.len() as u64);
+        // let progress = ProgressBar::hidden();
 
-        let mut fetches =
-            futures::stream::iter(all_packages.into_iter().map(|(name, hash_type, hash)| {
-                let name_logger = name;
-                let base = base.clone();
-                let cache_path = format!("{}/{}/{}", hash_type, &hash[..2], hash);
-                let client = client.clone();
-                async move {
-                    retry(
-                        || async {
-                            let base = base.lock().await;
-                            let download_path = format!("archive/{}", cache_path.clone());
-                            if base.add_to_overlay(&download_path).await? {
-                                debug!("skip, already exists");
-                                return Ok(());
-                            }
-                            let file = base.create_file_for_write(download_path).await?;
-                            drop(base);
-                            download_by_hash(
-                                client.clone(),
-                                file,
-                                self.archive_url.clone(),
-                                cache_path.clone(),
-                                (hash_type.clone(), hash.clone()),
-                            )
-                            .await?;
-                            Ok(())
-                        },
-                        5,
-                        "download file".to_string(),
-                    )
-                    .await
+        let mut failed_tasks = vec![];
+
+        // first, try download from cache
+        let file_list = all_packages
+            .iter()
+            .cloned()
+            .map(|task| {
+                let (hash_type, hash) = task.hashes[0].clone();
+                let cache_relative_path = build_hash_url(&hash_type, &hash);
+
+                let path = self.base_path.join(&cache_relative_path);
+
+                let url = if self.fetch_from_cache {
+                    format!("{}/{}", self.archive_url, cache_relative_path)
+                } else {
+                    task.src.clone()
+                };
+
+                DownloadTask {
+                    name: task.name.clone(),
+                    url,
+                    path,
+                    hash_type,
+                    hash,
                 }
-                .with_logger(slog_scope::logger().new(o!("package" => name_logger)))
-            }))
-            .buffer_unordered(self.concurrent_downloads);
+            })
+            .collect::<Vec<DownloadTask>>();
 
-        while fetches.next().await.is_some() {
-            progress.inc(1);
+        parallel_download_files(
+            client.clone(),
+            base.clone(),
+            file_list,
+            5,
+            self.concurrent_downloads,
+            |task, result| {
+                progress.inc(1);
+                if let Err(crate::error::Error::HTTPError(_)) = result {
+                    failed_tasks.push(task);
+                }
+            },
+        )
+        .await;
+
+        // then, download from source site
+        if !failed_tasks.is_empty() && self.fetch_from_cache {
+            warn!(
+                "{} packages require fetching from source site",
+                failed_tasks.len()
+            );
+            progress.inc_length(failed_tasks.len() as u64);
+
+            let failed_tasks: HashSet<String> =
+                HashSet::from_iter(failed_tasks.into_iter().map(|x| x.name));
+
+            let file_list = all_packages
+                .into_iter()
+                .filter(|x| failed_tasks.get(&x.name).is_some())
+                .map(|task| {
+                    let (hash_type, hash) = task.hashes[0].clone();
+                    let cache_relative_path = build_hash_url(&hash_type, &hash);
+                    let path = self.base_path.join(&cache_relative_path);
+
+                    DownloadTask {
+                        name: task.name.clone(),
+                        url: task.src,
+                        path,
+                        hash_type,
+                        hash,
+                    }
+                })
+                .collect::<Vec<DownloadTask>>();
+
+            parallel_download_files(
+                client.clone(),
+                base.clone(),
+                file_list,
+                5,
+                self.concurrent_downloads,
+                |_, _| progress.inc(1),
+            )
+            .await;
         }
 
         index.commit().await?;
         repo_file.commit().await?;
+
+        base.lock().await.commit().await?;
+
         Ok(())
     }
 }

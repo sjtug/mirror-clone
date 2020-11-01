@@ -23,6 +23,8 @@ pub enum Error {
     HTTPError(reqwest::StatusCode),
     #[error("JSON Decode Error {0}")]
     JsonDecodeError(#[from] serde_json::Error),
+    #[error("Overlay Filesystem Error {0}")]
+    OverlayFSError(#[from] overlay::OverlayFSError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

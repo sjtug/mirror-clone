@@ -74,8 +74,7 @@ impl Conda {
         let file_list = packages_to_download
             .into_iter()
             .map(|(pkg, hash_type, hash)| {
-                let mut path = self.base_path.clone();
-                path.push(&pkg);
+                let path = self.base_path.join(&pkg);
 
                 DownloadTask {
                     name: pkg.clone(),
@@ -93,7 +92,7 @@ impl Conda {
             file_list,
             5,
             self.concurrent_downloads,
-            || progress.inc(1),
+            |_, _| progress.inc(1),
         )
         .await;
 
@@ -116,6 +115,9 @@ impl Conda {
         }
 
         index.commit().await?;
+
+        base.lock().await.commit().await?;
+
         Ok(())
     }
 }
