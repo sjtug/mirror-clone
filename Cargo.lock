@@ -944,7 +944,6 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "rand 0.7.3",
- "slog-scope",
  "tempdir",
  "tokio",
 ]

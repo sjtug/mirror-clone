@@ -2,8 +2,6 @@ use futures::future::{BoxFuture, FutureExt};
 use futures::lock::Mutex;
 use rand::distributions::Alphanumeric;
 use rand::prelude::*;
-use slog_scope::debug;
-use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::io;
 use std::iter;
@@ -218,11 +216,15 @@ mod tests {
     use super::*;
     use tempdir::TempDir;
 
+    fn new_fuse() -> FusedFiles {
+        Arc::new(Mutex::new(HashMap::new()))
+    }
+
     #[tokio::test]
     async fn test_overlay_file_create() {
         let tmp_dir = TempDir::new("overlay").unwrap();
         let overlay_file = tmp_dir.path().join("test.bin");
-        let file = OverlayFile::create_for_write(overlay_file, "".into())
+        let file = OverlayFile::create_for_write(overlay_file, "".into(), new_fuse())
             .await
             .unwrap();
         assert!(tmp_dir.path().join("test.bin.tmp").exists());
@@ -235,7 +237,7 @@ mod tests {
     async fn test_overlay_file_run_id() {
         let tmp_dir = TempDir::new("overlay").unwrap();
         let overlay_file = tmp_dir.path().join("test.bin");
-        let file = OverlayFile::create_for_write(overlay_file, "2333".into())
+        let file = OverlayFile::create_for_write(overlay_file, "2333".into(), new_fuse())
             .await
             .unwrap();
         assert!(tmp_dir.path().join("test.bin.2333.tmp").exists());
@@ -248,13 +250,13 @@ mod tests {
     async fn test_overlay_file_write_twice() {
         let tmp_dir = TempDir::new("overlay").unwrap();
         let overlay_file = tmp_dir.path().join("test.bin");
-        OverlayFile::create_for_write(overlay_file.clone(), "".into())
+        OverlayFile::create_for_write(overlay_file.clone(), "".into(), new_fuse())
             .await
             .unwrap()
             .commit()
             .await
             .unwrap();
-        OverlayFile::create_for_write(overlay_file.clone(), "".into())
+        OverlayFile::create_for_write(overlay_file.clone(), "".into(), new_fuse())
             .await
             .unwrap()
             .commit()
@@ -266,11 +268,11 @@ mod tests {
     async fn test_overlay_file_create_twice() {
         let tmp_dir = TempDir::new("overlay").unwrap();
         let overlay_file = tmp_dir.path().join("test.bin");
-        let file1 = OverlayFile::create_for_write(overlay_file.clone(), "".into())
+        let file1 = OverlayFile::create_for_write(overlay_file.clone(), "".into(), new_fuse())
             .await
             .unwrap();
         assert!(
-            OverlayFile::create_for_write(overlay_file.clone(), "".into())
+            OverlayFile::create_for_write(overlay_file.clone(), "".into(), new_fuse())
                 .await
                 .is_err()
         );
@@ -281,7 +283,7 @@ mod tests {
     async fn test_overlay_file_drop() {
         let tmp_dir = TempDir::new("overlay").unwrap();
         let overlay_file = tmp_dir.path().join("test.bin");
-        let file1 = OverlayFile::create_for_write(overlay_file.clone(), "".into())
+        let file1 = OverlayFile::create_for_write(overlay_file.clone(), "".into(), new_fuse())
             .await
             .unwrap();
         drop(file1);
@@ -297,7 +299,7 @@ mod tests {
         let mut f = File::create(&overlay_file).await.unwrap();
         f.write_all(b"2333333").await.unwrap();
         drop(f);
-        let file1 = OverlayFile::create_for_write(overlay_file.clone(), "".into())
+        let file1 = OverlayFile::create_for_write(overlay_file.clone(), "".into(), new_fuse())
             .await
             .unwrap();
         drop(file1);

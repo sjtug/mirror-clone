@@ -10,7 +10,6 @@ edition = "2018"
 rand = "0.7"
 tokio = { version = "0.2", features = ["full"] }
 futures = "0.3"
-slog-scope = "4.3"
 
 [dev-dependencies]
 tempdir = "0.3"
