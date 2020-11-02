@@ -19,6 +19,8 @@ pub enum Error {
         expected: String,
         checksum: String,
     },
+    #[error("Length Mismatch expected {expected}, get {size}")]
+    LengthMismatch { expected: usize, size: usize },
     #[error("HTTP Error {0}")]
     HTTPError(reqwest::StatusCode),
     #[error("JSON Decode Error {0}")]

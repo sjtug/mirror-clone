@@ -44,11 +44,16 @@ pub async fn download_to_file(
 
 pub async fn content_of(file: &mut OverlayFile) -> Result<Vec<u8>> {
     let file = file.file();
-    let size = file.metadata().await?.len() as usize;
-    let mut buf = Vec::with_capacity(size);
+    let expected = file.metadata().await?.len() as usize;
+    let mut buf = Vec::with_capacity(expected);
     file.seek(std::io::SeekFrom::Start(0)).await?;
     file.read_to_end(&mut buf).await?;
-    assert_eq!(buf.len(), size);
+    if buf.len() != expected {
+        return Err(Error::LengthMismatch {
+            size: buf.len(),
+            expected,
+        });
+    }
     Ok(buf)
 }
 
