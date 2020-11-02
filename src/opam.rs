@@ -23,10 +23,9 @@ use crate::utils::{
 pub struct Opam {
     pub repo: String,
     pub base_path: PathBuf,
-    pub archive_url: String,
+    pub archive_url: Option<String>,
     pub debug_mode: bool,
     pub concurrent_downloads: usize,
-    pub fetch_from_cache: bool,
 }
 
 #[derive(Clone)]
@@ -97,20 +96,6 @@ fn build_hash_url(hash_type: &str, hash: &str) -> String {
     format!("{}/{}/{}", hash_type, &hash[..2], hash)
 }
 
-async fn download_by_hash(
-    client: reqwest::Client,
-    mut file: OverlayFile,
-    archive_url: String,
-    cache_path: String,
-    checksum: (String, String),
-) -> Result<()> {
-    info!("download by hash cache {}", cache_path);
-    download_to_file(client, format!("{}/{}", archive_url, cache_path), &mut file).await?;
-    verify_checksum(&mut file, checksum.0, checksum.1).await?;
-    file.commit().await?;
-    Ok(())
-}
-
 impl Opam {
     pub async fn run(&self) -> Result<()> {
         let base = OverlayDirectory::new(&self.base_path).await?;
@@ -151,80 +136,87 @@ impl Opam {
 
         let mut failed_tasks = vec![];
 
-        // first, try download from cache
+        // generate download task
         let file_list = all_packages
             .iter()
             .cloned()
             .map(|task| {
+                // download file to OPAM cache
                 let (hash_type, hash) = task.hashes[0].clone();
                 let cache_relative_path = build_hash_url(&hash_type, &hash);
-
                 let path = self.base_path.join(&cache_relative_path);
 
-                let url = if self.fetch_from_cache {
-                    format!("{}/{}", self.archive_url, cache_relative_path)
-                } else {
-                    task.src.clone()
-                };
-
-                DownloadTask {
+                let task = DownloadTask {
                     name: task.name.clone(),
-                    url,
+                    url: task.src.clone(),
                     path,
                     hash_type,
                     hash,
+                };
+
+                if let Some(ref archive) = self.archive_url {
+                    let mut cache_task = task.clone();
+                    cache_task.url = format!("{}/{}", archive, cache_relative_path);
+                    return vec![cache_task, task];
                 }
+
+                vec![task]
             })
-            .collect::<Vec<DownloadTask>>();
+            .collect::<Vec<Vec<DownloadTask>>>();
 
-        parallel_download_files(
-            client.clone(),
-            base.clone(),
-            file_list,
-            5,
-            self.concurrent_downloads,
-            |task, result| {
-                progress.inc(1);
-                if let Err(crate::error::Error::HTTPError(_)) = result {
-                    failed_tasks.push(task);
-                }
-            },
-        )
-        .await;
+        if self.archive_url.is_some() {
+            let cache_tasks: Vec<DownloadTask> = file_list.iter().map(|x| x[0].clone()).collect();
+            let src_tasks: Vec<DownloadTask> = file_list.iter().map(|x| x[1].clone()).collect();
 
-        // then, download from source site
-        if !failed_tasks.is_empty() && self.fetch_from_cache {
+            // first, download from OPAM cache
+            parallel_download_files(
+                client.clone(),
+                base.clone(),
+                cache_tasks,
+                5,
+                self.concurrent_downloads,
+                |task, result| {
+                    progress.inc(1);
+                    if let Err(crate::error::Error::HTTPError(_)) = result {
+                        failed_tasks.push(task);
+                    }
+                },
+            )
+            .await;
+
+            // then, download from source site
             warn!(
                 "{} packages require fetching from source site",
                 failed_tasks.len()
             );
+
             progress.inc_length(failed_tasks.len() as u64);
 
             let failed_tasks: HashSet<String> =
                 HashSet::from_iter(failed_tasks.into_iter().map(|x| x.name));
 
-            let file_list = all_packages
+            let src_tasks = src_tasks
                 .into_iter()
                 .filter(|x| failed_tasks.get(&x.name).is_some())
-                .map(|task| {
-                    let (hash_type, hash) = task.hashes[0].clone();
-                    let cache_relative_path = build_hash_url(&hash_type, &hash);
-                    let path = self.base_path.join(&cache_relative_path);
-
-                    DownloadTask {
-                        name: task.name.clone(),
-                        url: task.src,
-                        path,
-                        hash_type,
-                        hash,
-                    }
-                })
                 .collect::<Vec<DownloadTask>>();
 
             parallel_download_files(
                 client.clone(),
                 base.clone(),
-                file_list,
+                src_tasks,
+                5,
+                self.concurrent_downloads,
+                |_, _| progress.inc(1),
+            )
+            .await;
+        } else {
+            parallel_download_files(
+                client.clone(),
+                base.clone(),
+                file_list
+                    .into_iter()
+                    .map(|mut x| x.pop().unwrap())
+                    .collect(),
                 5,
                 self.concurrent_downloads,
                 |_, _| progress.inc(1),

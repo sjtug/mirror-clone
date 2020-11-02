@@ -2,6 +2,12 @@
 
 An all-in-one mirror utility
 
+## Example
+
+```bash
+cargo run -- conda https://mirrors.sjtug.sjtu.edu.cn/anaconda/pkgs/main/win-64 /srv/data/conda/pkgs/main/win-64
+```
+
 ## Motivation
 
 The observation is that, software registeries follow nearly the same design. They
