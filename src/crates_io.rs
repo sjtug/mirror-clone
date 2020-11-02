@@ -1,10 +1,8 @@
 use futures::lock::Mutex;
-use regex::Regex;
+
 use serde::Deserialize;
-use slog_scope::{info, warn};
-use std::collections::HashSet;
-use std::io::Read;
-use std::iter::FromIterator;
+use slog_scope::info;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
@@ -14,8 +12,8 @@ use overlay::OverlayDirectory;
 
 use crate::error::Result;
 use crate::oracle::Oracle;
-use crate::tar::tar_gz_entries;
-use crate::utils::{content_of, parallel_download_files, retry_download, DownloadTask};
+
+use crate::utils::{parallel_download_files, DownloadTask};
 
 pub struct CratesIo {
     pub repo_path: PathBuf,
