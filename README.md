@@ -8,6 +8,7 @@ An all-in-one mirror utility
 cargo run --release -- conda https://mirrors.sjtug.sjtu.edu.cn/anaconda/pkgs/main/win-64 /srv/data/conda/pkgs/main/win-64
 cargo run --release -- opam https://opam.ocaml.org /srv/data/opam --archive https://opam.ocaml.org/cache
 cargo run --release -- opam https://coq.inria.fr/opam/released /srv/data/coq-released
+cargo run --release -- crates_io /srv/data/crates.io-index /srv/data/crates.io/crates https://static.crates.io/crates
 ```
 
 ## Motivation
