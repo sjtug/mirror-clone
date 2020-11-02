@@ -53,7 +53,8 @@ where
     type OutError = Error;
 
     fn handle(&mut self, current_attempt: usize, e: Error) -> RetryPolicy<Error> {
-        if matches!(e, Error::Reqwest(_) | Error::MockError(_) | Error::ChecksumError { .. }) {
+        if matches!(e, Error::Reqwest(_) | Error::MockError(_) | Error::ChecksumError { .. } | Error::LengthMismatch { .. })
+        {
             if current_attempt > self.max_attempts {
                 warn!(
                     "[{}] all attempts ({}) have been used up",

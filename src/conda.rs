@@ -1,15 +1,11 @@
 use futures::lock::Mutex;
-use futures::StreamExt;
 use indicatif::ProgressBar;
-
-use overlay::OverlayDirectory;
-
 use serde_json::Value as JsonValue;
-
-use slog_scope::{debug, info, warn};
-
+use slog_scope::info;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use overlay::OverlayDirectory;
 
 use crate::error::Result;
 

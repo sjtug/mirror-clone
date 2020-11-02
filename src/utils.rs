@@ -3,7 +3,6 @@ pub mod retry;
 
 use futures::lock::Mutex;
 use futures_util::StreamExt;
-use overlay::{OverlayDirectory, OverlayFile};
 use reqwest::Client;
 use slog::o;
 use slog_scope::{debug, info};
@@ -12,11 +11,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+use overlay::{OverlayDirectory, OverlayFile};
+
 use crate::error::{Error, Result};
 
-pub use retry::{retry, retry_download};
-
 pub use checksum::verify_checksum;
+pub use retry::{retry, retry_download};
 
 pub async fn download_to_file(
     client: Client,
@@ -44,11 +44,16 @@ pub async fn download_to_file(
 
 pub async fn content_of(file: &mut OverlayFile) -> Result<Vec<u8>> {
     let file = file.file();
-    let size = file.metadata().await?.len() as usize;
-    let mut buf = Vec::with_capacity(size);
+    let expected = file.metadata().await?.len() as usize;
+    let mut buf = Vec::with_capacity(expected);
     file.seek(std::io::SeekFrom::Start(0)).await?;
     file.read_to_end(&mut buf).await?;
-    assert_eq!(buf.len(), size);
+    if buf.len() != expected {
+        return Err(Error::LengthMismatch {
+            size: buf.len(),
+            expected,
+        });
+    }
     Ok(buf)
 }
 

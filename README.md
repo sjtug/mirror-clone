@@ -2,6 +2,13 @@
 
 An all-in-one mirror utility
 
+## Example
+
+```bash
+cargo run --release -- conda https://mirrors.sjtug.sjtu.edu.cn/anaconda/pkgs/main/win-64 /srv/data/conda/pkgs/main/win-64
+cargo run --release -- opam https://opam.ocaml.org /srv/data/opam
+```
+
 ## Motivation
 
 The observation is that, software registeries follow nearly the same design. They
