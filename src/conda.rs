@@ -42,6 +42,8 @@ fn parse_index(data: &[u8]) -> Result<Vec<(String, String, String)>> {
 
 impl Conda {
     pub async fn run(&self, oracle: Oracle) -> Result<()> {
+        info!("scanning existing files");
+
         let base = OverlayDirectory::new(&self.base_path).await?;
         let base = Arc::new(Mutex::new(base));
         let client = &oracle.client;
