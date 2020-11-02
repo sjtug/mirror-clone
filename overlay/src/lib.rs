@@ -92,10 +92,6 @@ impl OverlayDirectory {
         .boxed()
     }
 
-    fn check_within<P1: AsRef<Path>, P2: AsRef<Path>>(_base: P1, _check: P2) -> bool {
-        unimplemented!()
-    }
-
     pub async fn try_fuse<P: AsRef<Path>>(&self, path: P) -> Result<bool, OverlayFSError> {
         let path = self.base_path.join(path);
         let mut fused_files = self.fused_files.lock().await;

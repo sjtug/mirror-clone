@@ -1,24 +1,18 @@
 use futures::lock::Mutex;
-use futures::StreamExt;
 use indicatif::ProgressBar;
-use itertools::Itertools;
-use overlay::{OverlayDirectory, OverlayFile};
 use regex::Regex;
-
 use slog_scope::{info, warn};
-
 use std::collections::HashSet;
 use std::io::Read;
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use overlay::OverlayDirectory;
+
 use crate::error::Result;
 use crate::tar::tar_gz_entries;
-use crate::utils::{
-    content_of, download_to_file, parallel_download_files, retry_download, verify_checksum,
-    DownloadTask,
-};
+use crate::utils::{content_of, parallel_download_files, retry_download, DownloadTask};
 
 pub struct Opam {
     pub repo: String,

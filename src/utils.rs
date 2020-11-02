@@ -3,7 +3,6 @@ pub mod retry;
 
 use futures::lock::Mutex;
 use futures_util::StreamExt;
-use overlay::{OverlayDirectory, OverlayFile};
 use reqwest::Client;
 use slog::o;
 use slog_scope::{debug, info};
@@ -12,11 +11,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+use overlay::{OverlayDirectory, OverlayFile};
+
 use crate::error::{Error, Result};
 
-pub use retry::{retry, retry_download};
-
 pub use checksum::verify_checksum;
+pub use retry::{retry, retry_download};
 
 pub async fn download_to_file(
     client: Client,
