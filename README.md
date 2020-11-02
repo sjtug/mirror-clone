@@ -11,6 +11,20 @@ cargo run --release -- opam https://coq.inria.fr/opam/released /srv/data/coq-rel
 cargo run --release -- crates_io /srv/data/crates.io-index /srv/data/crates.io/crates https://static.crates.io/crates
 ```
 
+## Development
+
+Most tasks have a `--debug` flag, which will only resolve and download first hundreds of packages.
+
+```bash
+cargo run -- --debug crates_io /srv/data/crates.io-index /srv/data/crates.io/crates https://static.crates.io/crates
+```
+
+When running on local machine, we recommand using `--progress` flag to see a progress bar.
+
+```bash
+cargo run -- --progress --log warning crates_io /srv/data/crates.io-index /srv/data/crates.io/crates https://static.crates.io/crates
+```
+
 ## Motivation
 
 The observation is that, software registeries follow nearly the same design. They
@@ -30,7 +44,7 @@ software registery faster, while making the utility robust.
   - [x] OPAM support
   - [x] Conda support
   - [ ] rust-static support
-  - [ ] static.crates.io support
+  - [x] static.crates.io support
   - [ ] apt support
 - Functionalities
   - [x] Download
