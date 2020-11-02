@@ -45,6 +45,8 @@ async fn parse_registery_file<P: AsRef<Path>>(
 
 impl CratesIo {
     pub async fn run(&self, oracle: Oracle) -> Result<()> {
+        info!("scanning existing files");
+
         let base = OverlayDirectory::new(&self.base_path).await?;
         let base = Arc::new(Mutex::new(base));
 
@@ -61,7 +63,7 @@ impl CratesIo {
                 break;
             }
             let entry = entry?;
-            let meta = fs::metadata(entry.path()).await?;
+            let meta = entry.metadata()?;
             if meta.is_file() {
                 cnt += 1;
                 parse_registery_file(entry.path(), &mut packages).await?;

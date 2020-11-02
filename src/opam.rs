@@ -93,6 +93,8 @@ fn build_hash_url(hash_type: &str, hash: &str) -> String {
 
 impl Opam {
     pub async fn run(&self, oracle: Oracle) -> Result<()> {
+        info!("scanning existing files");
+
         let base = OverlayDirectory::new(&self.base_path).await?;
         let base = Arc::new(Mutex::new(base));
 

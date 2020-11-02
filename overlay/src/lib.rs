@@ -71,7 +71,7 @@ impl OverlayDirectory {
         async move {
             let mut iter = fs::read_dir(path).await?;
             while let Some(entry) = iter.next_entry().await? {
-                let meta = fs::metadata(entry.path()).await?;
+                let meta = entry.metadata().await?;
                 if meta.is_dir() {
                     Self::fuse_and_clean_dir(entry.path(), fused_files.clone()).await?;
                 }
