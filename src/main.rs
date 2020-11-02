@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
                 concurrent_downloads: 16,
             }
             .run()
-            .with_logger(&slog_scope::logger().new(o!("task" => "conda")))
+            .with_logger(&slog_scope::logger().new(o!("task" => "opam")))
             .await?;
         }
         ("conda", Some(conda_matches)) => {

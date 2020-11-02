@@ -325,24 +325,24 @@ mod tests {
         assert!(file_path.exists());
     }
 
-    #[test]
-    #[ignore]
-    fn test_within() {
-        for base in &[PathBuf::from("opam_test"), PathBuf::from("opam_test/")] {
-            assert!(!OverlayDirectory::check_within(base, "opam_test_2333"));
-            assert!(!OverlayDirectory::check_within(base, "opam_te"));
-            assert!(!OverlayDirectory::check_within(base, ""));
-            assert!(OverlayDirectory::check_within(base, "opam_test"));
-            assert!(OverlayDirectory::check_within(base, "opam_test/23333"));
-            assert!(OverlayDirectory::check_within(base, "opam_test/23333/"));
-            assert!(!OverlayDirectory::check_within(
-                base,
-                PathBuf::from("opam_test/2333333").join("..").join("..")
-            ));
-            assert!(!OverlayDirectory::check_within(
-                base,
-                PathBuf::from("opam_test/2333333").join("/opam_test")
-            ));
-        }
-    }
+    // #[test]
+    // #[ignore]
+    // fn test_within() {
+    //     for base in &[PathBuf::from("opam_test"), PathBuf::from("opam_test/")] {
+    //         assert!(!OverlayDirectory::check_within(base, "opam_test_2333"));
+    //         assert!(!OverlayDirectory::check_within(base, "opam_te"));
+    //         assert!(!OverlayDirectory::check_within(base, ""));
+    //         assert!(OverlayDirectory::check_within(base, "opam_test"));
+    //         assert!(OverlayDirectory::check_within(base, "opam_test/23333"));
+    //         assert!(OverlayDirectory::check_within(base, "opam_test/23333/"));
+    //         assert!(!OverlayDirectory::check_within(
+    //             base,
+    //             PathBuf::from("opam_test/2333333").join("..").join("..")
+    //         ));
+    //         assert!(!OverlayDirectory::check_within(
+    //             base,
+    //             PathBuf::from("opam_test/2333333").join("/opam_test")
+    //         ));
+    //     }
+    // }
 }
