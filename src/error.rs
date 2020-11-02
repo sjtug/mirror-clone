@@ -27,6 +27,8 @@ pub enum Error {
     JsonDecodeError(#[from] serde_json::Error),
     #[error("Overlay Filesystem Error {0}")]
     OverlayFSError(#[from] overlay::OverlayFSError),
+    #[error("WalkDir Error {0}")]
+    WalkDirError(#[from] walkdir::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -1,4 +1,5 @@
 mod conda;
+mod crates_io;
 mod error;
 mod opam;
 mod oracle;
@@ -36,7 +37,7 @@ async fn main() -> Result<()> {
         (about: "An all-in-one mirror utility by SJTUG")
         (@arg progress: --progress ... "enable progress bar")
         (@arg debug: --debug ... "enable debug mode")
-        (@arg loglevel: --log-level +takes_value default_value("info") "set log level")
+        (@arg loglevel: --log +takes_value default_value("info") "set log level")
         (@subcommand opam =>
             (about: "mirror OPAM repository")
             (version: "1.0")
@@ -51,6 +52,14 @@ async fn main() -> Result<()> {
             (author: "Alex Chi <iskyzh@gmail.com>")
             (@arg repo: +required "Conda repository")
             (@arg dir: +required "clone directory")
+        )
+        (@subcommand crates_io =>
+            (about: "mirror crates.io repository")
+            (version: "1.0")
+            (author: "Alex Chi <iskyzh@gmail.com>")
+            (@arg repo: +required "crates.io index path")
+            (@arg dir: +required "clone directory")
+            (@arg src: +required "crates.io URL")
         )
     )
     .get_matches();
@@ -91,6 +100,18 @@ async fn main() -> Result<()> {
             }
             .run(oracle)
             .with_logger(&slog_scope::logger().new(o!("task" => "conda", "repo" => repo)))
+            .await?;
+        }
+        ("crates_io", Some(crates_io_matches)) => {
+            crates_io::CratesIo {
+                base_path: PathBuf::from(crates_io_matches.value_of("dir").unwrap()),
+                repo_path: PathBuf::from(crates_io_matches.value_of("repo").unwrap()),
+                crates_io_url: crates_io_matches.value_of("src").unwrap().to_string(),
+                debug_mode: matches.is_present("debug"),
+                concurrent_downloads: 16,
+            }
+            .run(oracle)
+            .with_logger(&slog_scope::logger().new(o!("task" => "crates.io")))
             .await?;
         }
         _ => {}

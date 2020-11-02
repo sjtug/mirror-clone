@@ -126,13 +126,15 @@ impl OverlayDirectory {
         OverlayFile::create(path, self.run_id.clone(), options, self.fused_files.clone()).await
     }
 
-    pub async fn commit(&self) -> Result<(), io::Error> {
+    pub async fn commit(&self) -> Result<usize, io::Error> {
+        let mut cnt = 0;
         for (path, fused) in self.fused_files.lock().await.iter() {
             if !fused {
                 fs::remove_file(path).await?;
+                cnt += 1;
             }
         }
-        Ok(())
+        Ok(cnt)
     }
 }
 

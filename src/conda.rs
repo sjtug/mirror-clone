@@ -112,7 +112,8 @@ impl Conda {
 
         index.commit().await?;
 
-        base.lock().await.commit().await?;
+        let result = base.lock().await.commit().await?;
+        info!("{} stale files removed", result);
 
         Ok(())
     }
