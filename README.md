@@ -7,6 +7,7 @@ An all-in-one mirror utility
 ```bash
 cargo run --release -- conda https://mirrors.sjtug.sjtu.edu.cn/anaconda/pkgs/main/win-64 /srv/data/conda/pkgs/main/win-64
 cargo run --release -- opam https://opam.ocaml.org /srv/data/opam
+cargo run --release -- opam https://coq.inria.fr/opam/released /srv/data/coq-released
 ```
 
 ## Motivation

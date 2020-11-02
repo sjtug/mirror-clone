@@ -44,16 +44,9 @@ pub async fn download_to_file(
 
 pub async fn content_of(file: &mut OverlayFile) -> Result<Vec<u8>> {
     let file = file.file();
-    let expected = file.metadata().await?.len() as usize;
-    let mut buf = Vec::with_capacity(expected);
+    let mut buf = Vec::new();
     file.seek(std::io::SeekFrom::Start(0)).await?;
     file.read_to_end(&mut buf).await?;
-    if buf.len() != expected {
-        return Err(Error::LengthMismatch {
-            size: buf.len(),
-            expected,
-        });
-    }
     Ok(buf)
 }
 
@@ -86,7 +79,7 @@ pub async fn parallel_download_files(
     file_list: Vec<DownloadTask>,
     retry_times: usize,
     concurrent_downloads: usize,
-    mut on_new_item: impl FnMut(DownloadTask, Result<()>) -> (),
+    mut on_new_item: impl FnMut(DownloadTask, Result<()>),
 ) {
     let mut fetches = futures::stream::iter(file_list.into_iter().map(|task| {
         let DownloadTask {

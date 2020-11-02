@@ -1,5 +1,4 @@
 use futures::lock::Mutex;
-use indicatif::ProgressBar;
 use regex::Regex;
 use slog_scope::{info, warn};
 use std::collections::HashSet;
@@ -11,6 +10,7 @@ use std::sync::Arc;
 use overlay::OverlayDirectory;
 
 use crate::error::Result;
+use crate::oracle::Oracle;
 use crate::tar::tar_gz_entries;
 use crate::utils::{content_of, parallel_download_files, retry_download, DownloadTask};
 
@@ -91,11 +91,12 @@ fn build_hash_url(hash_type: &str, hash: &str) -> String {
 }
 
 impl Opam {
-    pub async fn run(&self) -> Result<()> {
+    pub async fn run(&self, oracle: Oracle) -> Result<()> {
         let base = OverlayDirectory::new(&self.base_path).await?;
         let base = Arc::new(Mutex::new(base));
 
-        let client = reqwest::Client::new();
+        let client = &oracle.client;
+        let progress = &oracle.progress;
 
         info!("download repo file");
 
@@ -124,9 +125,7 @@ impl Opam {
 
         info!("parse repo index");
         let all_packages = parse_index_content(index_content, self.debug_mode)?;
-
-        let progress = ProgressBar::new(all_packages.len() as u64);
-        // let progress = ProgressBar::hidden();
+        progress.set_length(all_packages.len() as u64);
 
         let mut failed_tasks = vec![];
 
@@ -142,7 +141,7 @@ impl Opam {
 
                 let task = DownloadTask {
                     name: task.name.clone(),
-                    url: task.src.clone(),
+                    url: task.src,
                     path,
                     hash_type,
                     hash,
