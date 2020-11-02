@@ -1,4 +1,5 @@
 use futures::lock::Mutex;
+use itertools::Itertools;
 use regex::Regex;
 use slog_scope::{info, warn};
 use std::collections::HashSet;
@@ -130,7 +131,7 @@ impl Opam {
         let mut failed_tasks = vec![];
 
         // generate download task
-        let file_list = all_packages
+        let raw_file_list = all_packages
             .iter()
             .cloned()
             .map(|task| {
@@ -157,8 +158,27 @@ impl Opam {
             })
             .collect::<Vec<Vec<DownloadTask>>>();
 
+        info!("{} packages to download", raw_file_list.len());
+
+        let file_list = raw_file_list
+            .iter()
+            .cloned()
+            .unique_by(|task| (task[0].hash_type.clone(), task[0].hash.clone()))
+            .collect::<Vec<Vec<DownloadTask>>>();
+
+        if raw_file_list.len() != file_list.len() {
+            warn!(
+                "found {} duplicated packages",
+                raw_file_list.len() - file_list.len()
+            );
+        }
+
         if self.archive_url.is_some() {
-            let cache_tasks: Vec<DownloadTask> = file_list.iter().map(|x| x[0].clone()).collect();
+            let cache_tasks: Vec<DownloadTask> = file_list
+                .iter()
+                .map(|x| x[0].clone())
+                .unique_by(|task| (task.hash_type.clone(), task.hash.clone()))
+                .collect();
             let src_tasks: Vec<DownloadTask> = file_list.iter().map(|x| x[1].clone()).collect();
 
             // first, download from OPAM cache
