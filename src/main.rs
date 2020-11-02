@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
             (author: "Alex Chi <iskyzh@gmail.com>")
             (@arg repo: +required "OPAM repository")
             (@arg dir: +required "clone directory")
-            (@arg archive: "OPAM archive URL")
+            (@arg archive: --archive +takes_value "OPAM archive URL")
         )
         (@subcommand conda =>
             (about: "mirror Conda repository")
