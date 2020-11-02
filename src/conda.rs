@@ -1,5 +1,4 @@
 use futures::lock::Mutex;
-use indicatif::ProgressBar;
 use serde_json::Value as JsonValue;
 use slog_scope::info;
 use std::path::PathBuf;
@@ -8,6 +7,7 @@ use std::sync::Arc;
 use overlay::OverlayDirectory;
 
 use crate::error::Result;
+use crate::oracle::Oracle;
 
 use crate::utils::{content_of, parallel_download_files, retry_download, DownloadTask};
 
@@ -41,10 +41,11 @@ fn parse_index(data: &[u8]) -> Result<Vec<(String, String, String)>> {
 }
 
 impl Conda {
-    pub async fn run(&self) -> Result<()> {
+    pub async fn run(&self, oracle: Oracle) -> Result<()> {
         let base = OverlayDirectory::new(&self.base_path).await?;
         let base = Arc::new(Mutex::new(base));
-        let client = reqwest::Client::new();
+        let client = &oracle.client;
+        let progress = &oracle.progress;
 
         info!("download repo index");
 
@@ -64,8 +65,7 @@ impl Conda {
 
         info!("{} packages to download", packages_to_download.len());
 
-        // let progress = ProgressBar::new(packages_to_download.len() as u64);
-        let progress = ProgressBar::hidden();
+        progress.set_length(packages_to_download.len() as u64);
 
         let file_list = packages_to_download
             .into_iter()

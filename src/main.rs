@@ -1,10 +1,11 @@
 mod conda;
 mod error;
 mod opam;
+mod oracle;
 mod tar;
 mod utils;
 
-use clap::{App, Arg, SubCommand};
+use clap::clap_app;
 use slog::{o, Drain, Level, LevelFilter};
 use slog_scope_futures::FutureExt;
 use std::path::PathBuf;
@@ -29,76 +30,67 @@ fn create_logger(level: &str) -> slog::Logger {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let matches = App::new("Mirror Clone")
-        .version("1.0")
-        .author("Alex Chi <iskyzh@gmail.com>")
-        .about("An all-in-one mirror utility by SJTUG")
-        .arg(
-            Arg::with_name("log_level")
-                .help("set log level")
-                .default_value("info"),
+    let matches = clap_app!(mirror_clone =>
+        (version: "1.0")
+        (author: "Alex Chi <iskyzh@gmail.com>")
+        (about: "An all-in-one mirror utility by SJTUG")
+        (@arg progress: --progress ... "enable progress bar")
+        (@arg debug: --debug ... "enable debug mode")
+        (@arg loglevel: --log-level +takes_value default_value("info") "set log level")
+        (@subcommand opam =>
+            (about: "mirror OPAM repository")
+            (version: "1.0")
+            (author: "Alex Chi <iskyzh@gmail.com>")
+            (@arg repo: +required "OPAM repository")
+            (@arg dir: +required "clone directory")
+            (@arg archive: "OPAM archive URL")
         )
-        .arg(
-            Arg::with_name("debug")
-                .takes_value(false)
-                .help("enable debug mode"),
+        (@subcommand conda =>
+            (about: "mirror Conda repository")
+            (version: "1.0")
+            (author: "Alex Chi <iskyzh@gmail.com>")
+            (@arg repo: +required "Conda repository")
+            (@arg dir: +required "clone directory")
         )
-        .subcommand(
-            SubCommand::with_name("opam")
-                .about("mirror OPAM repository")
-                .version("1.0")
-                .author("Alex Chi <iskyzh@gmail.com>")
-                .arg(
-                    Arg::with_name("repo")
-                        .required(true)
-                        .help("OPAM repository"),
-                )
-                .arg(Arg::with_name("dir").required(true).help("clone directory"))
-                .arg(
-                    Arg::with_name("archive")
-                        .required(false)
-                        .help("OPAM archive URL"),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("conda")
-                .about("mirror Conda repository")
-                .version("1.0")
-                .author("Alex Chi <iskyzh@gmail.com>")
-                .arg(
-                    Arg::with_name("repo")
-                        .required(true)
-                        .help("Conda repository"),
-                )
-                .arg(Arg::with_name("dir").required(true).help("clone directory")),
-        )
-        .get_matches();
+    )
+    .get_matches();
 
     let _guard =
-        slog_scope::set_global_logger(create_logger(matches.value_of("log_level").unwrap()));
+        slog_scope::set_global_logger(create_logger(matches.value_of("loglevel").unwrap()));
+
+    let oracle = oracle::Oracle {
+        client: reqwest::Client::new(),
+        progress: if matches.is_present("progress") {
+            indicatif::ProgressBar::new(1)
+        } else {
+            indicatif::ProgressBar::hidden()
+        },
+    };
 
     match matches.subcommand() {
         ("opam", Some(opam_matches)) => {
+            let repo = opam_matches.value_of("repo").unwrap().to_string();
             opam::Opam {
                 base_path: PathBuf::from(opam_matches.value_of("dir").unwrap()),
-                repo: opam_matches.value_of("repo").unwrap().to_string(),
+                repo: repo.clone(),
                 archive_url: opam_matches.value_of("archive").map(|x| x.to_string()),
                 debug_mode: matches.is_present("debug"),
                 concurrent_downloads: 16,
             }
-            .run()
-            .with_logger(&slog_scope::logger().new(o!("task" => "opam")))
+            .run(oracle)
+            .with_logger(&slog_scope::logger().new(o!("task" => "opam", "repo" => repo)))
             .await?;
         }
         ("conda", Some(conda_matches)) => {
+            let repo = conda_matches.value_of("repo").unwrap().to_string();
             conda::Conda {
-                base_path: PathBuf::from(PathBuf::from(conda_matches.value_of("dir").unwrap())),
-                repo: conda_matches.value_of("repo").unwrap().to_string(),
+                base_path: PathBuf::from(conda_matches.value_of("dir").unwrap()),
+                repo: repo.clone(),
                 debug_mode: matches.is_present("debug"),
                 concurrent_downloads: 16,
             }
-            .run()
-            .with_logger(&slog_scope::logger().new(o!("task" => "conda")))
+            .run(oracle)
+            .with_logger(&slog_scope::logger().new(o!("task" => "conda", "repo" => repo)))
             .await?;
         }
         _ => {}
