@@ -91,7 +91,7 @@ in Rust, it will be removed.
 Files in overlay filesystem can be **fused**. Fusing a file makes it immutable in overlay
 filesystem, and all consequent actions on this file will be rejected with error `already fused`.
 `try_fuse` will add existing file to the overlay filesystem, thus preventing re-download of the
-same file. Committing a overlay file automatically fuses a file.
+same file. Committing an overlay file automatically fuses a file.
 
 ### Unified Logging Interface
 
