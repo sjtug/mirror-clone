@@ -58,6 +58,11 @@ impl CratesIo {
         let mut packages: Vec<CratesIoPackage> = vec![];
         let mut cnt: usize = 0;
 
+        progress.set_style(
+            indicatif::ProgressStyle::default_spinner()
+                .template("[{elapsed_precise}] {prefix:.bold.dim} {spinner} {pos:>7} {msg}"),
+        );
+
         for entry in WalkDir::new(&self.repo_path) {
             if self.debug_mode && cnt >= 100 {
                 break;
@@ -66,9 +71,13 @@ impl CratesIo {
             let meta = entry.metadata()?;
             if meta.is_file() {
                 cnt += 1;
+                progress.inc(1);
                 parse_registery_file(entry.path(), &mut packages).await?;
             }
         }
+
+        progress.set_style(indicatif::ProgressStyle::default_bar());
+        progress.reset();
 
         info!(
             "{} packages with {} version variants parsed",
