@@ -1,3 +1,4 @@
+#![feature(box_patterns)]
 mod conda;
 mod crates_io;
 mod error;

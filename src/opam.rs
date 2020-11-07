@@ -1,12 +1,13 @@
-use futures::lock::Mutex;
-use itertools::Itertools;
-use regex::Regex;
-use slog_scope::{info, warn};
 use std::collections::HashSet;
 use std::io::Read;
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use futures::lock::Mutex;
+use itertools::Itertools;
+use opam_file_format::parser::{Item, Value};
+use slog_scope::{info, warn};
 
 use overlay::OverlayDirectory;
 
@@ -23,6 +24,13 @@ pub struct Opam {
     pub concurrent_downloads: usize,
 }
 
+fn split_once<'a>(in_string: &'a str, pat: &str) -> Option<(&'a str, &'a str)> {
+    let mut splitter = in_string.splitn(2, pat);
+    let first = splitter.next()?;
+    let second = splitter.next()?;
+    Some((first, second))
+}
+
 #[derive(Clone)]
 pub struct OpamDownloadTask {
     name: String,
@@ -35,12 +43,10 @@ fn parse_index_content(
     limit_entries: bool,
 ) -> Result<Vec<OpamDownloadTask>> {
     let mut buf = Vec::new();
-    let mut result = Vec::new();
-    let opam_parser = Regex::new(r#""(md5|sha1|sha256|sha512)=(.*)""#)?;
-    let string_finder = Regex::new(r#""(.*)""#)?;
 
     let mut entries = tar_gz_entries(&index_content);
     let tar_gz_iterator = entries.entries()?;
+    let mut opam_files: Vec<(String, String)> = vec![];
     for (idx, entry) in tar_gz_iterator.enumerate() {
         if limit_entries && idx >= 2000 {
             break;
@@ -50,41 +56,85 @@ fn parse_index_content(
         let path = entry.path()?.into_owned();
         let path_str = path.to_string_lossy().to_string();
         if path_str.ends_with("/opam") {
-            let mut hashes = vec![];
+            let name = path_str.split('/').collect::<Vec<&str>>()[2].to_string();
             buf.clear();
             entry.read_to_end(&mut buf)?;
-
-            let name = path_str.split('/').collect::<Vec<&str>>()[2].to_string();
-            // only read data after last "src" field
-            let data = std::str::from_utf8(&buf)?
-                .split("src:")
-                .collect::<Vec<&str>>();
-            let mut src = String::new();
-            if let Some(data) = data.last() {
-                if let Some(capture) = string_finder.captures_iter(data).next() {
-                    src = capture[1].to_string();
-                }
-
-                // only read data after "checksum" field
-                let data = data.split("checksum").collect::<Vec<&str>>();
-
-                if let Some(data) = data.get(1) {
-                    for capture in opam_parser.captures_iter(data) {
-                        hashes.push((capture[1].to_string(), capture[2].to_string()));
-                    }
-                }
-            }
-            if hashes.is_empty() {
-                warn!("no checksum found in {}", name);
-            } else if src == "" {
-                warn!("no src found in {}", name);
-            } else {
-                result.push(OpamDownloadTask { name, src, hashes })
-            }
+            let content = std::str::from_utf8(&buf)?.to_string();
+            opam_files.push((name, content))
         }
     }
 
-    Ok(result)
+    Ok(opam_files
+        .into_iter()
+        .filter_map(|(name, content)| {
+            opam_file_format::lex(&content)
+                .ok()
+                .and_then(|tokens| opam_file_format::parse(tokens.into_iter()).ok())
+                .and_then(|ast| {
+                    if let Some(box Item::Section { name: _, items }) = ast.items.get("url") {
+                        Some(items.clone())
+                    } else {
+                        warn!("no url section found in {}", name);
+                        None
+                    }
+                })
+                .and_then(|url| {
+                    let mut result = None;
+                    for field in ["src", "http", "archive"].iter() {
+                        if let Some(box Item::Variable(Value::String(src))) =
+                            url.get(&field.to_string())
+                        {
+                            result = Some((src.clone(), url));
+                            break;
+                        }
+                    }
+                    if result.is_none() {
+                        warn!("missing src field in {}", name);
+                    };
+                    result
+                })
+                .and_then(|(src, url)| {
+                    if let Some(checksums) = url.get("checksum") {
+                        if let Item::Variable(Value::String(str)) = &**checksums {
+                            if let Some((hash_func, chksum)) = split_once(&str, "=") {
+                                Some((src, vec![(hash_func.to_string(), chksum.to_string())]))
+                            } else {
+                                Some((src, vec![("md5".to_string(), str.to_string())]))
+                            }
+                        } else if let Item::Variable(Value::List(list)) = &**checksums {
+                            let checksums = list
+                                .iter()
+                                .filter_map(|values| {
+                                    if let Value::String(str) = &**values {
+                                        if let Some((hash_func, chksum)) = split_once(&str, "=") {
+                                            Some((hash_func.to_string(), chksum.to_string()))
+                                        } else {
+                                            Some(("md5".to_string(), str.to_string()))
+                                        }
+                                    } else {
+                                        warn!("no checksum found in {}", name);
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<(String, String)>>();
+                            if !checksums.is_empty() {
+                                Some((src, checksums))
+                            } else {
+                                warn!("no checksum found in {}", name);
+                                None
+                            }
+                        } else {
+                            warn!("no checksum found in {}", name);
+                            None
+                        }
+                    } else {
+                        warn!("no checksum found in {}", name);
+                        None
+                    }
+                })
+                .map(|(src, hashes)| OpamDownloadTask { name, src, hashes })
+        })
+        .collect())
 }
 
 fn build_hash_url(hash_type: &str, hash: &str) -> String {
