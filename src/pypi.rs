@@ -89,7 +89,7 @@ impl SnapshotStorage<String> for Pypi {
 
 #[async_trait]
 impl SourceStorage<String, String> for Pypi {
-    async fn get_object(&self, snapshot: String) -> Result<String> {
+    async fn get_object(&self, snapshot: String, mission: &Mission) -> Result<String> {
         Ok(snapshot)
     }
 }

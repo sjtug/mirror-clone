@@ -10,10 +10,10 @@ pub trait SnapshotStorage<SnapshotItem> {
 
 #[async_trait]
 pub trait SourceStorage<SnapshotItem, SourceItem> {
-    async fn get_object(&self, snapshot: SnapshotItem) -> Result<SourceItem>;
+    async fn get_object(&self, snapshot: SnapshotItem, mission: &Mission) -> Result<SourceItem>;
 }
 
 #[async_trait]
 pub trait TargetStorage<TargetItem> {
-    async fn put_object(&self, item: TargetItem) -> Result<()>;
+    async fn put_object(&self, item: TargetItem, mission: &Mission) -> Result<()>;
 }

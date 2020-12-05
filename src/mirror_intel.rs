@@ -38,8 +38,15 @@ impl SnapshotStorage<String> for MirrorIntel {
 
 #[async_trait]
 impl TargetStorage<String> for MirrorIntel {
-    async fn put_object(&self, item: String) -> Result<()> {
-        println!("{}", item);
+    async fn put_object(&self, item: String, mission: &Mission) -> Result<()> {
+        let target_url = format!("{}/{}", self.base, item);
+        let response = mission.client.get(&target_url).send().await?;
+        if let Some(content_length) = response.content_length() {
+            if !response.url().as_str().contains("jcloud") {
+                tokio::time::delay_for(std::time::Duration::from_millis(content_length / 100000))
+                    .await;
+            }
+        }
         Ok(())
     }
 }

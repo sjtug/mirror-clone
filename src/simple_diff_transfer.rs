@@ -80,9 +80,34 @@ where
 
         info!(logger, "mirror in progress...");
 
+        let progress = ProgressBar::new(source.len() as u64);
+        progress.set_style(crate::utils::bar());
+        progress.set_prefix("mirror");
+
+        let source_mission = Mission {
+            client: client.clone(),
+            progress: ProgressBar::hidden(),
+            logger: logger.new(o!("task" => "mirror.source")),
+        };
+
+        let target_mission = Mission {
+            client: client.clone(),
+            progress: ProgressBar::hidden(),
+            logger: logger.new(o!("task" => "mirror.target")),
+        };
+
+        // TODO: do diff between two endpoints
+        // TODO: multi-thread transmission
         for source_snapshot in source {
-            let source_object = self.source.get_object(source_snapshot).await?;
-            self.target.put_object(source_object).await?;
+            progress.set_message(&source_snapshot);
+            let source_object = self
+                .source
+                .get_object(source_snapshot, &source_mission)
+                .await?;
+            if let Err(err) = self.target.put_object(source_object, &target_mission).await {
+                warn!(target_mission.logger, "error while transfer: {:?}", err);
+            }
+            progress.inc(1);
         }
 
         info!(logger, "transfer complete");
