@@ -9,8 +9,8 @@ pub trait SnapshotStorage<SnapshotItem> {
 }
 
 #[async_trait]
-pub trait SourceStorage<SourceItem> {
-    async fn get_object(&self) -> Result<SourceItem>;
+pub trait SourceStorage<SnapshotItem, SourceItem> {
+    async fn get_object(&self, snapshot: SnapshotItem) -> Result<SourceItem>;
 }
 
 #[async_trait]

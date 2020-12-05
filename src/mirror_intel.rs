@@ -39,6 +39,7 @@ impl SnapshotStorage<String> for MirrorIntel {
 #[async_trait]
 impl TargetStorage<String> for MirrorIntel {
     async fn put_object(&self, item: String) -> Result<()> {
+        println!("{}", item);
         Ok(())
     }
 }

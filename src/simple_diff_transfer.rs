@@ -2,7 +2,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use reqwest::{header, Client, ClientBuilder};
 
 use crate::error::Result;
-use crate::utils::create_logger;
+use crate::utils::{create_logger, spinner};
 use crate::{
     common::Mission,
     traits::{SnapshotStorage, SourceStorage, TargetStorage},
@@ -14,22 +14,16 @@ use console::style;
 
 pub struct SimpleDiffTransfer<Source, Target>
 where
-    Source: SourceStorage<String> + SnapshotStorage<String>,
+    Source: SourceStorage<String, String> + SnapshotStorage<String>,
     Target: TargetStorage<String> + SnapshotStorage<String>,
 {
     source: Source,
     target: Target,
 }
 
-fn spinner() -> ProgressStyle {
-    ProgressStyle::default_spinner()
-        .template("{prefix:.bold.dim} {spinner} {wide_msg}")
-        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
-}
-
 impl<Source, Target> SimpleDiffTransfer<Source, Target>
 where
-    Source: SourceStorage<String> + SnapshotStorage<String>,
+    Source: SourceStorage<String, String> + SnapshotStorage<String>,
     Target: TargetStorage<String> + SnapshotStorage<String>,
 {
     pub fn new(source: Source, target: Target) -> Self {
@@ -74,10 +68,22 @@ where
             })
         );
 
-        source?;
-        target?;
+        let source = source?;
+        let target = target?;
+
+        info!(
+            logger,
+            "source {} objects, target {} objects",
+            source.len(),
+            target.len()
+        );
 
         info!(logger, "mirror in progress...");
+
+        for source_snapshot in source {
+            let source_object = self.source.get_object(source_snapshot).await?;
+            self.target.put_object(source_object).await?;
+        }
 
         info!(logger, "transfer complete");
 

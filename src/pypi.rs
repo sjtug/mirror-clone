@@ -1,15 +1,19 @@
 use crate::common::Mission;
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::utils::bar;
+
 use async_trait::async_trait;
+use futures::Future;
+use futures_util::{StreamExt, TryStreamExt};
+use regex::Regex;
 use slog::{info, warn};
 
-pub struct Pypi;
-
-impl Pypi {
-    pub fn new() -> Self {
-        Self
-    }
+#[derive(Debug)]
+pub struct Pypi {
+    pub simple_base: String,
+    pub package_base: String,
+    pub debug: bool,
 }
 
 #[async_trait]
@@ -20,28 +24,72 @@ impl SnapshotStorage<String> for Pypi {
         let client = mission.client;
 
         info!(logger, "downloading pypi index...");
-        tokio::time::delay_for(std::time::Duration::from_secs(3)).await;
+        let mut index = client
+            .get(&format!("{}/", self.simple_base))
+            .send()
+            .await?
+            .text()
+            .await?;
+        let matcher = Regex::new(r#"<a.*href="(.*?)".*>(.*?)</a>"#).unwrap();
 
-        info!(logger, "downloading pypi package index...");
-        for i in 0..100 {
-            progress.inc(1);
-            progress.set_message(&i.to_string());
-            tokio::time::delay_for(std::time::Duration::from_millis(100)).await;
+        info!(logger, "parsing index...");
+        if self.debug {
+            index = index[..10000].to_string();
         }
+        let caps: Vec<(String, String)> = matcher
+            .captures_iter(&index)
+            .map(|cap| (cap[1].to_string(), cap[2].to_string()))
+            .collect();
+
+        info!(logger, "downloading package index...");
+        progress.set_length(caps.len() as u64);
+        progress.set_style(bar());
+
+        let packages: Result<Vec<Vec<(String, String)>>> =
+            futures::stream::iter(caps.into_iter().map(|(url, name)| {
+                let client = client.clone();
+                let simple_base = self.simple_base.clone();
+                let progress = progress.clone();
+                let matcher = matcher.clone();
+                async move {
+                    progress.set_message(&name);
+                    let package = client
+                        .get(&format!("{}/{}", simple_base, url))
+                        .send()
+                        .await?
+                        .text()
+                        .await?;
+                    let caps: Vec<(String, String)> = matcher
+                        .captures_iter(&package)
+                        .map(|cap| (cap[1].to_string(), cap[2].to_string()))
+                        .collect();
+                    progress.inc(1);
+                    Ok(caps)
+                }
+            }))
+            .buffer_unordered(16)
+            .try_collect()
+            .await;
+
+        let snapshot = packages?
+            .into_iter()
+            .flatten()
+            .map(|(url, _)| url[15..].to_string())
+            .collect();
 
         progress.finish_with_message("done");
 
-        Ok(vec![])
+        Ok(snapshot)
     }
 
     fn info(&self) -> String {
-        format!("pypi from pypi.org")
+        format!("pypi, {:?}", self)
     }
 }
 
 #[async_trait]
-impl SourceStorage<String> for Pypi {
-    async fn get_object(&self) -> Result<String> {
-        Ok("".to_string())
+impl SourceStorage<String, String> for Pypi {
+    async fn get_object(&self, snapshot: String) -> Result<String> {
+        Ok(snapshot)
     }
 }
