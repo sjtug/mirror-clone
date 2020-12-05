@@ -63,7 +63,7 @@ where
             self.source.snapshot(source_mission),
             self.target.snapshot(target_mission),
             tokio::task::spawn_blocking(move || {
-                #[cfg(debug_assertions)]
+                // #[cfg(debug_assertions)]
                 all_progress.join().unwrap()
             })
         );
@@ -100,10 +100,7 @@ where
         // TODO: multi-thread transmission
         for source_snapshot in source {
             progress.set_message(&source_snapshot);
-            let source_object = self
-                .source
-                .get_object(source_snapshot, &source_mission)
-                .await?;
+            let source_object = self.source.get_object(source_snapshot, &source_mission).await?;
             if let Err(err) = self.target.put_object(source_object, &target_mission).await {
                 warn!(target_mission.logger, "error while transfer: {:?}", err);
             }

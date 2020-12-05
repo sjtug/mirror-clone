@@ -1,7 +1,7 @@
-use crate::common::Mission;
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, SourceStorage};
 use crate::utils::bar;
+use crate::{common::Mission, error::Error};
 
 use async_trait::async_trait;
 use futures::Future;
@@ -34,7 +34,7 @@ impl SnapshotStorage<String> for Pypi {
 
         info!(logger, "parsing index...");
         if self.debug {
-            index = index[..10000].to_string();
+            index = index[..10000000].to_string();
         }
         let caps: Vec<(String, String)> = matcher
             .captures_iter(&index)
@@ -51,7 +51,8 @@ impl SnapshotStorage<String> for Pypi {
                 let simple_base = self.simple_base.clone();
                 let progress = progress.clone();
                 let matcher = matcher.clone();
-                async move {
+                let logger = logger.clone();
+                let func = async move {
                     progress.set_message(&name);
                     let package = client
                         .get(&format!("{}/{}", simple_base, url))
@@ -64,10 +65,19 @@ impl SnapshotStorage<String> for Pypi {
                         .map(|cap| (cap[1].to_string(), cap[2].to_string()))
                         .collect();
                     progress.inc(1);
-                    Ok(caps)
+                    Ok::<Vec<(String, String)>, Error>(caps)
+                };
+                async move {
+                    match func.await {
+                        Ok(x) => Ok(x),
+                        Err(err) => {
+                            warn!(logger, "failed to fetch index {:?}", err);
+                            Ok(vec![])
+                        }
+                    }
                 }
             }))
-            .buffer_unordered(16)
+            .buffer_unordered(256)
             .try_collect()
             .await;
 
