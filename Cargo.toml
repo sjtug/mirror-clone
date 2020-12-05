@@ -9,8 +9,6 @@ edition = "2018"
 [dependencies]
 tokio = { version = "0.2", features = ["full"] }
 reqwest = { version = "0.10", features = ["rustls-tls", "stream"] }
-overlay = { path = "./overlay" }
-log = "0.4"
 futures-util = "0.3"
 flate2 = "1.0"
 tar = "0.4"
@@ -24,8 +22,6 @@ rand = "0.7"
 slog-term = "2.6"
 slog = "2.5"
 slog-async = "2.5"
-slog-scope-futures = "0.1"
-slog-scope = "4.3"
 md-5 = "0.9"
 sha-1 = "0.9"
 sha2 = "0.9"
@@ -34,9 +30,4 @@ serde_json = "1.0"
 clap = "2.33"
 walkdir = "2.3"
 serde = { version = "1.0", features = ["derive"] }
-opam_file_format = { git = "https://github.com/PhotonQuantum/opam-file-format-rs", branch = "main" }
-
-[workspace]
-members = [
-    "overlay"
-]
+async-trait = "0.1"
