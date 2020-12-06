@@ -23,7 +23,7 @@ impl SnapshotStorage<String> for MirrorIntel {
         let client = mission.client;
 
         info!(logger, "checking intel connection...");
-        client.get(&self.base).send().await?;
+        client.head(&self.base).send().await?;
         progress.finish_with_message("done");
 
         // We always return empty file list, and diff transfer will transfer
