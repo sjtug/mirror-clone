@@ -9,8 +9,8 @@ mod utils;
 #[tokio::main]
 async fn main() {
     let source = pypi::Pypi {
-        simple_base: "https://nanomirrors.tuna.tsinghua.edu.cn/pypi/web/simple".to_string(),
-        package_base: "https://nanomirrors.tuna.tsinghua.edu.cn/pypi/web/packages".to_string(),
+        simple_base: "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple".to_string(),
+        package_base: "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages".to_string(),
         debug: false,
     };
     let target = mirror_intel::MirrorIntel::new(
