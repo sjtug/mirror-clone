@@ -1,12 +1,10 @@
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, SourceStorage};
-use crate::utils::bar;
+
 use crate::{common::Mission, error::Error};
 
 use async_trait::async_trait;
-use futures_util::{StreamExt, TryStreamExt};
-use regex::Regex;
-use slog::{info, warn};
+use slog::info;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
@@ -34,7 +32,7 @@ impl SnapshotStorage<String> for Rsync {
     async fn snapshot(&mut self, mission: Mission) -> Result<Vec<String>> {
         let logger = mission.logger;
         let progress = mission.progress;
-        let client = mission.client;
+        let _client = mission.client;
 
         info!(logger, "running rsync...");
 
