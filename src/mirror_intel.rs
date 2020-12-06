@@ -2,7 +2,7 @@ use crate::common::Mission;
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, TargetStorage};
 use async_trait::async_trait;
-use slog::{info, warn};
+use slog::info;
 
 #[derive(Debug)]
 pub struct MirrorIntel {

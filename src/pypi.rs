@@ -4,7 +4,6 @@ use crate::utils::bar;
 use crate::{common::Mission, error::Error};
 
 use async_trait::async_trait;
-use futures::Future;
 use futures_util::{StreamExt, TryStreamExt};
 use regex::Regex;
 use slog::{info, warn};
@@ -34,7 +33,7 @@ impl SnapshotStorage<String> for Pypi {
 
         info!(logger, "parsing index...");
         if self.debug {
-            index = index[..10000000].to_string();
+            index = index[..1000000].to_string();
         }
         let caps: Vec<(String, String)> = matcher
             .captures_iter(&index)
@@ -99,7 +98,7 @@ impl SnapshotStorage<String> for Pypi {
 
 #[async_trait]
 impl SourceStorage<String, String> for Pypi {
-    async fn get_object(&self, snapshot: String, mission: &Mission) -> Result<String> {
+    async fn get_object(&self, snapshot: String, _mission: &Mission) -> Result<String> {
         Ok(snapshot)
     }
 }

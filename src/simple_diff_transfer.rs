@@ -1,16 +1,16 @@
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use reqwest::{header, Client, ClientBuilder};
+use indicatif::{MultiProgress, ProgressBar};
+use reqwest::ClientBuilder;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::utils::{create_logger, spinner};
 use crate::{
     common::Mission,
     traits::{SnapshotStorage, SourceStorage, TargetStorage},
 };
 
-use slog::{info, o, warn, Drain};
-
-use console::style;
+use futures_util::StreamExt;
+use slog::{info, o, warn};
+use std::sync::Arc;
 
 pub struct SimpleDiffTransfer<Source, Target>
 where
@@ -30,7 +30,7 @@ where
         Self { source, target }
     }
 
-    pub async fn transfer(&mut self) -> Result<()> {
+    pub async fn transfer(mut self) -> Result<()> {
         let logger = create_logger();
         let client = ClientBuilder::new()
             .user_agent("mirror-clone / 0.1 (siyuan.internal.sjtug.org)")
@@ -59,7 +59,7 @@ where
             logger: logger.new(o!("task" => "snapshot.target")),
         };
 
-        let (source, target, _) = tokio::join!(
+        let (source_snapshot, target_snapshot, _) = tokio::join!(
             self.source.snapshot(source_mission),
             self.target.snapshot(target_mission),
             tokio::task::spawn_blocking(move || {
@@ -68,42 +68,65 @@ where
             })
         );
 
-        let source = source?;
-        let target = target?;
+        let source_snapshot = source_snapshot?;
+        let target_snapshot = target_snapshot?;
 
         info!(
             logger,
             "source {} objects, target {} objects",
-            source.len(),
-            target.len()
+            source_snapshot.len(),
+            target_snapshot.len()
         );
 
         info!(logger, "mirror in progress...");
 
-        let progress = ProgressBar::new(source.len() as u64);
+        let progress = ProgressBar::new(source_snapshot.len() as u64);
         progress.set_style(crate::utils::bar());
         progress.set_prefix("mirror");
 
-        let source_mission = Mission {
+        let source_mission = Arc::new(Mission {
             client: client.clone(),
             progress: ProgressBar::hidden(),
             logger: logger.new(o!("task" => "mirror.source")),
-        };
+        });
 
-        let target_mission = Mission {
+        let target_mission = Arc::new(Mission {
             client: client.clone(),
             progress: ProgressBar::hidden(),
             logger: logger.new(o!("task" => "mirror.target")),
-        };
+        });
 
         // TODO: do diff between two endpoints
-        // TODO: multi-thread transmission
-        for source_snapshot in source {
+
+        let source = Arc::new(self.source);
+        let target = Arc::new(self.target);
+
+        let map_snapshot = |source_snapshot: String| {
             progress.set_message(&source_snapshot);
-            let source_object = self.source.get_object(source_snapshot, &source_mission).await?;
-            if let Err(err) = self.target.put_object(source_object, &target_mission).await {
-                warn!(target_mission.logger, "error while transfer: {:?}", err);
+            let source = source.clone();
+            let target = target.clone();
+            let source_mission = source_mission.clone();
+            let target_mission = target_mission.clone();
+            let logger = logger.clone();
+
+            let func = async move {
+                let source_object = source.get_object(source_snapshot, &source_mission).await?;
+                if let Err(err) = target.put_object(source_object, &target_mission).await {
+                    warn!(target_mission.logger, "error while transfer: {:?}", err);
+                }
+                Ok::<(), Error>(())
+            };
+            async move {
+                if let Err(err) = func.await {
+                    warn!(logger, "failed to fetch index {:?}", err);
+                }
             }
+        };
+
+        let mut results = futures::stream::iter(source_snapshot.into_iter().map(map_snapshot))
+            .buffer_unordered(128);
+
+        while let Some(_x) = results.next().await {
             progress.inc(1);
         }
 
