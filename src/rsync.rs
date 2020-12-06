@@ -15,6 +15,7 @@ use std::process::Stdio;
 #[derive(Debug)]
 pub struct Rsync {
     pub base: String,
+    pub debug: bool,
 }
 
 fn parse_rsync_output(line: &str) -> Result<(&str, &str, &str, &str, &str)> {
@@ -38,6 +39,7 @@ impl SnapshotStorage<String> for Rsync {
         info!(logger, "running rsync...");
 
         let mut cmd = Command::new("rsync");
+        cmd.kill_on_drop(true);
         cmd.arg("-r").arg(self.base.clone());
         cmd.stdout(Stdio::piped());
 
@@ -51,18 +53,23 @@ impl SnapshotStorage<String> for Rsync {
         let mut reader = BufReader::new(stdout).lines();
 
         let result = tokio::spawn(async {
-            child.await.map_err(|err| {
+            let status = child.await.map_err(|err| {
                 Error::ProcessError(format!("child process encountered an error: {:?}", err))
             })?;
-            Ok::<(), Error>(())
+            Ok::<_, Error>(status)
         });
 
         let mut snapshot = vec![];
+        let mut idx = 0;
 
         while let Some(line) = reader.next_line().await? {
             progress.inc(1);
+            idx += 1;
+            if self.debug && idx > 1000 {
+                break;
+            }
 
-            if let Ok((permission, size, date, time, file)) = parse_rsync_output(&line) {
+            if let Ok((permission, _, _, _, file)) = parse_rsync_output(&line) {
                 progress.set_message(file);
                 if permission.starts_with("-rw") {
                     // only clone files
@@ -71,7 +78,12 @@ impl SnapshotStorage<String> for Rsync {
             }
         }
 
-        result.await.unwrap()?;
+        progress.set_message("waiting for rsync to exit");
+
+        let status = result.await.unwrap()?;
+        if !status.success() {
+            return Err(Error::ProcessError(format!("exit code: {:?}", status)));
+        }
 
         progress.finish_with_message("done");
 

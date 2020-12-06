@@ -18,10 +18,17 @@ async fn main() {
     // };
     let source = rsync::Rsync {
         base: "rsync://nanomirrors.tuna.tsinghua.edu.cn/homebrew-bottles".to_string(),
+        debug: true,
     };
+    // let source = rsync::Rsync {
+    //     base: "rsync://nanomirrors.tuna.tsinghua.edu.cn/llvm-apt".to_string(),
+    //     debug: true,
+    // };
     let target = mirror_intel::MirrorIntel::new(
         "https://siyuan.internal.sjtug.org/homebrew-bottles".to_string(),
     );
+    // let target =
+    //     mirror_intel::MirrorIntel::new("https://siyuan.internal.sjtug.org/llvm-apt".to_string());
     let transfer = simple_diff_transfer::SimpleDiffTransfer::new(source, target);
     transfer.transfer().await.unwrap();
 }
