@@ -49,7 +49,6 @@ impl TargetStorage<String> for MirrorIntel {
     async fn put_object(&self, item: String, mission: &Mission) -> Result<()> {
         let target_url = format!("{}/{}", self.base, item);
         let response = self.client.head(&target_url).send().await?;
-        println!("{:?}", response.headers());
 
         if let Some(location) = response.headers().get("Location") {
             if !location.to_str().unwrap().contains("jcloud") {
