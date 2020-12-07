@@ -2,7 +2,7 @@ use crate::common::Mission;
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, TargetStorage};
 use async_trait::async_trait;
-use slog::info;
+use slog::{info, warn};
 
 #[derive(Debug)]
 pub struct MirrorIntel {
@@ -43,7 +43,17 @@ impl TargetStorage<String> for MirrorIntel {
         let response = mission.client.get(&target_url).send().await?;
         if let Some(content_length) = response.content_length() {
             if !response.url().as_str().contains("jcloud") {
-                tokio::time::delay_for(std::time::Duration::from_millis(content_length / 100000))
+                tokio::time::delay_for(std::time::Duration::from_millis(
+                    content_length / 1000000 / 32,
+                ))
+                .await;
+            }
+        }
+        if let Some(queue_length) = response.headers().get("X-Intel-Queue-Length") {
+            let queue_length: u64 = queue_length.to_str().unwrap().parse().unwrap();
+            if queue_length > 16384 {
+                warn!(mission.logger, "queue full, length={}", queue_length);
+                tokio::time::delay_for(std::time::Duration::from_secs((queue_length - 16384) * 10))
                     .await;
             }
         }
