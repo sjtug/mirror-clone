@@ -18,7 +18,7 @@ async fn main() {
     // };
     let source = rsync::Rsync {
         base: "rsync://nanomirrors.tuna.tsinghua.edu.cn/homebrew-bottles".to_string(),
-        debug: true,
+        debug: false,
     };
     // let source = rsync::Rsync {
     //     base: "rsync://nanomirrors.tuna.tsinghua.edu.cn/llvm-apt".to_string(),
