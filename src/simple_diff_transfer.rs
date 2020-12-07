@@ -12,6 +12,11 @@ use futures_util::StreamExt;
 use slog::{info, o, warn};
 use std::sync::Arc;
 
+#[derive(Debug)]
+pub struct SimpleDiffTransferConfig {
+    pub progress: bool,
+}
+
 pub struct SimpleDiffTransfer<Source, Target>
 where
     Source: SourceStorage<String, String> + SnapshotStorage<String>,
@@ -19,6 +24,7 @@ where
 {
     source: Source,
     target: Target,
+    config: SimpleDiffTransferConfig,
 }
 
 impl<Source, Target> SimpleDiffTransfer<Source, Target>
@@ -26,8 +32,12 @@ where
     Source: SourceStorage<String, String> + SnapshotStorage<String>,
     Target: TargetStorage<String> + SnapshotStorage<String>,
 {
-    pub fn new(source: Source, target: Target) -> Self {
-        Self { source, target }
+    pub fn new(source: Source, target: Target, config: SimpleDiffTransferConfig) -> Self {
+        Self {
+            source,
+            target,
+            config,
+        }
     }
 
     pub async fn transfer(mut self) -> Result<()> {
@@ -35,6 +45,7 @@ where
         let client = ClientBuilder::new()
             .user_agent("mirror-clone / 0.1 (siyuan.internal.sjtug.org)")
             .build()?;
+        info!(logger, "using simple diff transfer"; "config" => format!("{:?}", self.config));
         info!(logger, "begin transfer"; "source" => self.source.info(), "target" => self.target.info());
 
         info!(logger, "taking snapshot...");
@@ -59,12 +70,14 @@ where
             logger: logger.new(o!("task" => "snapshot.target")),
         };
 
+        let config_progress = self.config.progress;
         let (source_snapshot, target_snapshot, _) = tokio::join!(
             self.source.snapshot(source_mission),
             self.target.snapshot(target_mission),
             tokio::task::spawn_blocking(move || {
-                // #[cfg(debug_assertions)]
-                all_progress.join().unwrap()
+                if config_progress {
+                    all_progress.join().unwrap()
+                }
             })
         );
 
