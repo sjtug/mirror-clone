@@ -5,15 +5,20 @@ use async_trait::async_trait;
 use reqwest::{redirect::Policy, Client, ClientBuilder};
 use slog::{info, warn};
 
-pub struct MirrorIntel {
+#[derive(Debug)]
+pub struct MirrorIntelConfig {
     base: String,
+}
+
+pub struct MirrorIntel {
+    config: MirrorIntelConfig,
     client: Client,
 }
 
 impl MirrorIntel {
     pub fn new(base: String) -> Self {
         Self {
-            base,
+            config: MirrorIntelConfig { base },
             client: ClientBuilder::new()
                 .user_agent("mirror-clone / 0.1 (siyuan.internal.sjtug.org)")
                 .redirect(Policy::none())
@@ -31,7 +36,7 @@ impl SnapshotStorage<String> for MirrorIntel {
         let client = mission.client;
 
         info!(logger, "checking intel connection...");
-        client.head(&self.base).send().await?;
+        client.head(&self.config.base).send().await?;
         progress.finish_with_message("done");
 
         // We always return empty file list, and diff transfer will transfer
@@ -40,14 +45,14 @@ impl SnapshotStorage<String> for MirrorIntel {
     }
 
     fn info(&self) -> String {
-        format!("mirror_intel, base={}", self.base)
+        format!("mirror_intel, {:?}", self.config)
     }
 }
 
 #[async_trait]
 impl TargetStorage<String> for MirrorIntel {
     async fn put_object(&self, item: String, mission: &Mission) -> Result<()> {
-        let target_url = format!("{}/{}", self.base, item);
+        let target_url = format!("{}/{}", self.config.base, item);
         let response = self.client.head(&target_url).send().await?;
 
         if let Some(location) = response.headers().get("Location") {

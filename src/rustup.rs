@@ -1,6 +1,5 @@
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, SourceStorage};
-use crate::utils::bar;
 use crate::{common::Mission, error::Error};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
