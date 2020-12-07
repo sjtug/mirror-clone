@@ -70,12 +70,14 @@ where
             logger: logger.new(o!("task" => "snapshot.target")),
         };
 
+        let config_progress = self.config.progress;
         let (source_snapshot, target_snapshot, _) = tokio::join!(
             self.source.snapshot(source_mission),
             self.target.snapshot(target_mission),
             tokio::task::spawn_blocking(move || {
-                // #[cfg(debug_assertions)]
-                all_progress.join().unwrap()
+                if config_progress {
+                    all_progress.join().unwrap()
+                }
             })
         );
 
