@@ -43,6 +43,13 @@ async fn main() {
             (@arg base: --base +takes_value default_value("rsync://nanomirrors.tuna.tsinghua.edu.cn/homebrew-bottles") "package base")
             (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/homebrew-bottles") "mirror-intel target")
         )
+        (@subcommand dart_pub =>
+            (about: "mirror dart_pub from tuna to siyuan mirror-intel with simple diff transfer")
+            (version: "1.0")
+            (author: "Alex Chi <iskyzh@gmail.com>")
+            (@arg base: --base +takes_value default_value("rsync://nanomirrors.tuna.tsinghua.edu.cn/dart-pub") "package base")
+            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/dart-pub") "mirror-intel target")
+        )
     )
     .get_matches();
 
@@ -86,6 +93,22 @@ async fn main() {
             let source = rsync::Rsync {
                 base: sub_matches.value_of("base").unwrap().to_string(),
                 debug: matches.is_present("debug"),
+                ignore_prefix: "".to_string(),
+            };
+            let target =
+                mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
+            let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                source,
+                target,
+                simple_diff_transfer::SimpleDiffTransferConfig { progress },
+            );
+            transfer.transfer().await.unwrap();
+        }
+        ("dart_pub", Some(sub_matches)) => {
+            let source = rsync::Rsync {
+                base: sub_matches.value_of("base").unwrap().to_string(),
+                debug: matches.is_present("debug"),
+                ignore_prefix: "api".to_string(),
             };
             let target =
                 mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
