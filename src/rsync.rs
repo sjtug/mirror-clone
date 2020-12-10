@@ -14,6 +14,7 @@ use std::process::Stdio;
 pub struct Rsync {
     pub base: String,
     pub debug: bool,
+    pub ignore_prefix: String,
 }
 
 fn parse_rsync_output(line: &str) -> Result<(&str, &str, &str, &str, &str)> {
@@ -69,6 +70,9 @@ impl SnapshotStorage<String> for Rsync {
 
             if let Ok((permission, _, _, _, file)) = parse_rsync_output(&line) {
                 progress.set_message(file);
+                if file.starts_with(&self.ignore_prefix) {
+                    continue;
+                }
                 if permission.starts_with("-rw") {
                     // only clone files
                     snapshot.push(file.to_string());
