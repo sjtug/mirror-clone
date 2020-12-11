@@ -46,6 +46,7 @@ impl SnapshotStorage<String> for Homebrew {
             .filter_map(|url| url.as_str())
             .map(|url| url.to_string())
             .map(|url| url.replace("https://homebrew.bintray.com/", ""))
+            .map(|url| url.replace("https://linuxbrew.bintray.com/", ""))
             .collect();
 
         progress.finish_with_message("done");
