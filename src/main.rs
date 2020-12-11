@@ -2,6 +2,7 @@
 
 mod common;
 mod error;
+mod html_scanner;
 mod mirror_intel;
 mod pypi;
 mod rsync;
@@ -27,6 +28,13 @@ async fn main() {
             (@arg simple_base: --simple_base +takes_value default_value("https://nanomirrors.tuna.tsinghua.edu.cn/pypi/web/simple") "simple base")
             (@arg package_base: --package_base +takes_value default_value("https://nanomirrors.tuna.tsinghua.edu.cn/pypi/web/packages") "package base")
             (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/pypi-packages") "mirror-intel target")
+        )
+        (@subcommand pytorch_wheels =>
+            (about: "mirror pytorch stable from download.pytorch.org to siyuan mirror-intel with simple diff transfer")
+            (version: "1.0")
+            (author: "Alex Chi <iskyzh@gmail.com>")
+            (@arg package_index: --simple_base +takes_value default_value("https://download.pytorch.org/whl/torch_stable.html") "package index")
+            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/pytorch-wheels") "mirror-intel target")
         )
         (@subcommand rustup =>
             (about: "mirror rustup from static.rust-lang.org to siyuan mirror-intel with simple diff transfer")
@@ -109,6 +117,19 @@ async fn main() {
                 base: sub_matches.value_of("base").unwrap().to_string(),
                 debug: matches.is_present("debug"),
                 ignore_prefix: "api".to_string(),
+            };
+            let target =
+                mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
+            let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                source,
+                target,
+                simple_diff_transfer::SimpleDiffTransferConfig { progress },
+            );
+            transfer.transfer().await.unwrap();
+        }
+        ("pytorch_wheels", Some(sub_matches)) => {
+            let source = html_scanner::HtmlScanner {
+                url: sub_matches.value_of("package_index").unwrap().to_string(),
             };
             let target =
                 mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
