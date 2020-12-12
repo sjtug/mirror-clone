@@ -53,15 +53,17 @@ impl SnapshotStorage<String> for MirrorIntel {
 impl TargetStorage<String> for MirrorIntel {
     async fn put_object(&self, item: String, mission: &Mission) -> Result<()> {
         let target_url = format!("{}/{}", self.config.base, item);
-        let response = self.client.head(&target_url).send().await?;
+        let response = self.client.get(&target_url).send().await?;
+        let headers = response.headers().clone();
+        drop(response);
 
-        if let Some(location) = response.headers().get("Location") {
+        if let Some(location) = headers.get("Location") {
             if !location.to_str().unwrap().contains("jcloud") {
                 tokio::time::delay_for(std::time::Duration::from_secs(1)).await;
             }
         }
 
-        if let Some(queue_length) = response.headers().get("X-Intel-Queue-Length") {
+        if let Some(queue_length) = headers.get("X-Intel-Queue-Length") {
             let queue_length: u64 = queue_length.to_str().unwrap().parse().unwrap();
             if queue_length > 16384 {
                 warn!(mission.logger, "queue full, length={}", queue_length);
