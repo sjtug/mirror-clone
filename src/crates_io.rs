@@ -4,7 +4,7 @@ use crate::traits::{SnapshotStorage, SourceStorage};
 
 use async_trait::async_trait;
 use serde::Deserialize;
-use slog::{debug, info};
+use slog::info;
 use std::io::Read;
 
 #[derive(Deserialize, Debug)]
