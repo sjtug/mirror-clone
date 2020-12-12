@@ -33,7 +33,7 @@ impl SnapshotStorage<String> for Pypi {
 
         info!(logger, "parsing index...");
         if self.debug {
-            index = index[..1000000].to_string();
+            index = index[..100000].to_string();
         }
         let caps: Vec<(String, String)> = matcher
             .captures_iter(&index)
@@ -83,7 +83,7 @@ impl SnapshotStorage<String> for Pypi {
         let snapshot = packages?
             .into_iter()
             .flatten()
-            .map(|(url, _)| url[15..].to_string())
+            .map(|(url, _)| url.replace("../../packages/", "").to_string())
             .collect();
 
         progress.finish_with_message("done");

@@ -7,9 +7,10 @@ use crate::{
     common::Mission,
     traits::{SnapshotStorage, SourceStorage, TargetStorage},
 };
+use rand::prelude::*;
 
 use futures_util::StreamExt;
-use slog::{info, o, warn};
+use slog::{debug, info, o, warn};
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -37,6 +38,15 @@ where
             source,
             target,
             config,
+        }
+    }
+
+    fn debug_snapshot(logger: slog::Logger, snapshot: &[String]) {
+        let selected: Vec<_> = snapshot
+            .choose_multiple(&mut rand::thread_rng(), 50)
+            .collect();
+        for item in selected {
+            debug!(logger, "{}", item);
         }
     }
 
@@ -91,9 +101,16 @@ where
             target_snapshot.len()
         );
 
+        Self::debug_snapshot(logger.clone(), &source_snapshot);
+        Self::debug_snapshot(logger.clone(), &target_snapshot);
+
         info!(logger, "mirror in progress...");
 
-        let progress = ProgressBar::new(source_snapshot.len() as u64);
+        let progress = if self.config.progress {
+            ProgressBar::new(source_snapshot.len() as u64)
+        } else {
+            ProgressBar::hidden()
+        };
         progress.set_style(crate::utils::bar());
         progress.set_prefix("mirror");
 
