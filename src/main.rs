@@ -67,6 +67,13 @@ async fn main() {
             (@arg zip_master: --zip_master +takes_value default_value("https://github.com/rust-lang/crates.io-index/archive/master.zip") "zip of crates.io-index master")
             (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/crates.io/crates") "mirror-intel target")
         )
+        (@subcommand flutter_infra =>
+            (about: "mirror flutter_infra from tuna to siyuan mirror-intel with simple diff transfer")
+            (version: "1.0")
+            (author: "Alex Chi <iskyzh@gmail.com>")
+            (@arg base: --base +takes_value default_value("rsync://nanomirrors.tuna.tsinghua.edu.cn/flutter/flutter_infra/") "package base")
+            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/flutter_infra") "mirror-intel target")
+        )
     )
     .get_matches();
 
@@ -151,6 +158,21 @@ async fn main() {
             let source = crates_io::CratesIo {
                 zip_master: sub_matches.value_of("zip_master").unwrap().to_string(),
                 debug: matches.is_present("debug"),
+            };
+            let target =
+                mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
+            let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                source,
+                target,
+                simple_diff_transfer::SimpleDiffTransferConfig { progress },
+            );
+            transfer.transfer().await.unwrap();
+        }
+        ("flutter_infra", Some(sub_matches)) => {
+            let source = rsync::Rsync {
+                base: sub_matches.value_of("base").unwrap().to_string(),
+                debug: matches.is_present("debug"),
+                ignore_prefix: "".to_string(),
             };
             let target =
                 mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
