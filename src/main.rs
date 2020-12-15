@@ -2,6 +2,7 @@
 
 mod common;
 mod crates_io;
+mod dart;
 mod error;
 mod homebrew;
 mod html_scanner;
@@ -14,6 +15,7 @@ mod traits;
 mod utils;
 
 use clap::clap_app;
+use common::SnapshotConfig;
 
 #[tokio::main]
 async fn main() {
@@ -23,6 +25,7 @@ async fn main() {
         (about: "An all-in-one mirror utility by SJTUG")
         (@arg progress: --progress ... "enable progress bar")
         (@arg debug: --debug ... "enable debug mode")
+        (@arg concurrent_resolve: --concurrent_resolve +takes_value default_value("256")  "maximum concurrent resolving number")
         (@subcommand pypi =>
             (about: "mirror pypi from tuna to siyuan mirror-intel with simple diff transfer")
             (version: "1.0")
@@ -54,10 +57,10 @@ async fn main() {
             (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/homebrew-bottles") "mirror-intel target")
         )
         (@subcommand dart_pub =>
-            (about: "mirror dart_pub from tuna to siyuan mirror-intel with simple diff transfer")
+            (about: "mirror dart_pub from flutter.cn to siyuan mirror-intel with simple diff transfer")
             (version: "1.0")
             (author: "Alex Chi <iskyzh@gmail.com>")
-            (@arg base: --base +takes_value default_value("rsync://nanomirrors.tuna.tsinghua.edu.cn/dart-pub") "package base")
+            (@arg base: --base +takes_value default_value("https://mirrors.tuna.tsinghua.edu.cn/dart-pub") "package api base")
             (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/dart-pub") "mirror-intel target")
         )
         (@subcommand crates_io =>
@@ -79,6 +82,14 @@ async fn main() {
 
     let progress = matches.is_present("progress");
 
+    let snapshot_config = SnapshotConfig {
+        concurrent_resolve: matches
+            .value_of("concurrent_resolve")
+            .unwrap()
+            .parse()
+            .unwrap(),
+    };
+
     match matches.subcommand() {
         ("pypi", Some(sub_matches)) => {
             let source = pypi::Pypi {
@@ -91,7 +102,10 @@ async fn main() {
             let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
                 source,
                 target,
-                simple_diff_transfer::SimpleDiffTransferConfig { progress },
+                simple_diff_transfer::SimpleDiffTransferConfig {
+                    progress,
+                    snapshot_config,
+                },
             );
             transfer.transfer().await.unwrap();
         }
@@ -109,7 +123,10 @@ async fn main() {
             let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
                 source,
                 target,
-                simple_diff_transfer::SimpleDiffTransferConfig { progress },
+                simple_diff_transfer::SimpleDiffTransferConfig {
+                    progress,
+                    snapshot_config,
+                },
             );
             transfer.transfer().await.unwrap();
         }
@@ -122,22 +139,27 @@ async fn main() {
             let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
                 source,
                 target,
-                simple_diff_transfer::SimpleDiffTransferConfig { progress },
+                simple_diff_transfer::SimpleDiffTransferConfig {
+                    progress,
+                    snapshot_config,
+                },
             );
             transfer.transfer().await.unwrap();
         }
         ("dart_pub", Some(sub_matches)) => {
-            let source = rsync::Rsync {
+            let source = dart::Dart {
                 base: sub_matches.value_of("base").unwrap().to_string(),
                 debug: matches.is_present("debug"),
-                ignore_prefix: "api".to_string(),
             };
             let target =
                 mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
             let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
                 source,
                 target,
-                simple_diff_transfer::SimpleDiffTransferConfig { progress },
+                simple_diff_transfer::SimpleDiffTransferConfig {
+                    progress,
+                    snapshot_config,
+                },
             );
             transfer.transfer().await.unwrap();
         }
@@ -150,7 +172,10 @@ async fn main() {
             let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
                 source,
                 target,
-                simple_diff_transfer::SimpleDiffTransferConfig { progress },
+                simple_diff_transfer::SimpleDiffTransferConfig {
+                    progress,
+                    snapshot_config,
+                },
             );
             transfer.transfer().await.unwrap();
         }
@@ -164,7 +189,10 @@ async fn main() {
             let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
                 source,
                 target,
-                simple_diff_transfer::SimpleDiffTransferConfig { progress },
+                simple_diff_transfer::SimpleDiffTransferConfig {
+                    progress,
+                    snapshot_config,
+                },
             );
             transfer.transfer().await.unwrap();
         }
@@ -179,7 +207,10 @@ async fn main() {
             let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
                 source,
                 target,
-                simple_diff_transfer::SimpleDiffTransferConfig { progress },
+                simple_diff_transfer::SimpleDiffTransferConfig {
+                    progress,
+                    snapshot_config,
+                },
             );
             transfer.transfer().await.unwrap();
         }

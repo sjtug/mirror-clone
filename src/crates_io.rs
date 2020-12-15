@@ -1,4 +1,4 @@
-use crate::common::Mission;
+use crate::common::{Mission, SnapshotConfig};
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, SourceStorage};
 
@@ -22,7 +22,11 @@ pub struct CratesIo {
 
 #[async_trait]
 impl SnapshotStorage<String> for CratesIo {
-    async fn snapshot(&mut self, mission: Mission) -> Result<Vec<String>> {
+    async fn snapshot(
+        &mut self,
+        mission: Mission,
+        _config: &SnapshotConfig,
+    ) -> Result<Vec<String>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;

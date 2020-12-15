@@ -7,3 +7,8 @@ pub struct Mission {
     pub client: Client,
     pub logger: Logger,
 }
+
+#[derive(Debug)]
+pub struct SnapshotConfig {
+    pub concurrent_resolve: usize,
+}

@@ -1,6 +1,6 @@
-use crate::error::Result;
+use crate::common::{Mission, SnapshotConfig};
+use crate::error::{Error, Result};
 use crate::traits::{SnapshotStorage, SourceStorage};
-use crate::{common::Mission, error::Error};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use futures_util::{StreamExt, TryStreamExt};
@@ -19,7 +19,7 @@ fn day_earlier(date_time: DateTime<Utc>, days: i64) -> Option<DateTime<Utc>> {
 
 #[async_trait]
 impl SnapshotStorage<String> for Rustup {
-    async fn snapshot(&mut self, mission: Mission) -> Result<Vec<String>> {
+    async fn snapshot(&mut self, mission: Mission, config: &SnapshotConfig) -> Result<Vec<String>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -76,7 +76,7 @@ impl SnapshotStorage<String> for Rustup {
                     }
                 }
             }))
-            .buffer_unordered(256)
+            .buffer_unordered(config.concurrent_resolve)
             .try_collect()
             .await;
 
