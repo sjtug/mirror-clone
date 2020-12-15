@@ -70,7 +70,7 @@ impl SnapshotStorage<String> for Rsync {
 
             if let Ok((permission, _, _, _, file)) = parse_rsync_output(&line) {
                 progress.set_message(file);
-                if file.starts_with(&self.ignore_prefix) {
+                if !self.ignore_prefix.is_empty() && file.starts_with(&self.ignore_prefix) {
                     continue;
                 }
                 if permission.starts_with("-rw") {
