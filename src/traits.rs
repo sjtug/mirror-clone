@@ -1,10 +1,14 @@
-use crate::common::Mission;
+use crate::common::{Mission, SnapshotConfig};
 use crate::error::Result;
 use async_trait::async_trait;
 
 #[async_trait]
 pub trait SnapshotStorage<SnapshotItem> {
-    async fn snapshot(&mut self, mission: Mission) -> Result<Vec<SnapshotItem>>;
+    async fn snapshot(
+        &mut self,
+        mission: Mission,
+        config: &SnapshotConfig,
+    ) -> Result<Vec<SnapshotItem>>;
     fn info(&self) -> String;
 }
 

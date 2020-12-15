@@ -4,7 +4,7 @@ use reqwest::ClientBuilder;
 use crate::error::{Error, Result};
 use crate::utils::{create_logger, spinner};
 use crate::{
-    common::Mission,
+    common::{Mission, SnapshotConfig},
     traits::{SnapshotStorage, SourceStorage, TargetStorage},
 };
 use rand::prelude::*;
@@ -16,6 +16,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct SimpleDiffTransferConfig {
     pub progress: bool,
+    pub snapshot_config: SnapshotConfig,
 }
 
 pub struct SimpleDiffTransfer<Source, Target>
@@ -82,8 +83,10 @@ where
 
         let config_progress = self.config.progress;
         let (source_snapshot, target_snapshot, _) = tokio::join!(
-            self.source.snapshot(source_mission),
-            self.target.snapshot(target_mission),
+            self.source
+                .snapshot(source_mission, &self.config.snapshot_config),
+            self.target
+                .snapshot(target_mission, &self.config.snapshot_config),
             tokio::task::spawn_blocking(move || {
                 if config_progress {
                     all_progress.join().unwrap()

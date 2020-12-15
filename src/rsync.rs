@@ -1,7 +1,8 @@
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, SourceStorage};
 
-use crate::{common::Mission, error::Error};
+use crate::common::{Mission, SnapshotConfig};
+use crate::error::Error;
 
 use async_trait::async_trait;
 use slog::info;
@@ -30,7 +31,11 @@ fn parse_rsync_output(line: &str) -> Result<(&str, &str, &str, &str, &str)> {
 
 #[async_trait]
 impl SnapshotStorage<String> for Rsync {
-    async fn snapshot(&mut self, mission: Mission) -> Result<Vec<String>> {
+    async fn snapshot(
+        &mut self,
+        mission: Mission,
+        _config: &SnapshotConfig,
+    ) -> Result<Vec<String>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let _client = mission.client;
