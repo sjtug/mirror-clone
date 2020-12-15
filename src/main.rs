@@ -57,7 +57,7 @@ async fn main() {
             (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/homebrew-bottles") "mirror-intel target")
         )
         (@subcommand dart_pub =>
-            (about: "mirror dart_pub from flutter.cn to siyuan mirror-intel with simple diff transfer")
+            (about: "mirror dart_pub from tuna to siyuan mirror-intel with simple diff transfer")
             (version: "1.0")
             (author: "Alex Chi <iskyzh@gmail.com>")
             (@arg base: --base +takes_value default_value("https://mirrors.tuna.tsinghua.edu.cn/dart-pub") "package api base")
