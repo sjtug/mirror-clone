@@ -57,7 +57,7 @@ impl SnapshotStorage<String> for MirrorIntel {
 impl TargetStorage<String> for MirrorIntel {
     async fn put_object(&self, item: String, mission: &Mission) -> Result<()> {
         let target_url = format!("{}/{}", self.config.base, item);
-        let response = self.client.get(&target_url).send().await?;
+        let response = self.client.head(&target_url).send().await?;
         let headers = response.headers().clone();
         drop(response);
 
