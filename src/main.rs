@@ -17,14 +17,14 @@ mod utils;
 use clap::clap_app;
 use common::SnapshotConfig;
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let matches = clap_app!(mirror_clone =>
         (version: "1.0")
         (author: "Alex Chi <iskyzh@gmail.com>")
         (about: "An all-in-one mirror utility by SJTUG")
         (@arg progress: --progress ... "enable progress bar")
         (@arg debug: --debug ... "enable debug mode")
+        (@arg workers: --workers +takes_value "workers")
         (@arg concurrent_resolve: --concurrent_resolve +takes_value default_value("256")  "maximum concurrent resolving number")
         (@subcommand pypi =>
             (about: "mirror pypi from tuna to siyuan mirror-intel with simple diff transfer")
@@ -90,132 +90,151 @@ async fn main() {
             .unwrap(),
     };
 
-    match matches.subcommand() {
-        ("pypi", Some(sub_matches)) => {
-            let source = pypi::Pypi {
-                simple_base: sub_matches.value_of("simple_base").unwrap().to_string(),
-                package_base: sub_matches.value_of("package_base").unwrap().to_string(),
-                debug: matches.is_present("debug"),
-            };
-            let target =
-                mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
-            let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                source,
-                target,
-                simple_diff_transfer::SimpleDiffTransferConfig {
-                    progress,
-                    snapshot_config,
-                },
-            );
-            transfer.transfer().await.unwrap();
-        }
-        ("rustup", Some(sub_matches)) => {
-            let source = rustup::Rustup {
-                base: sub_matches.value_of("base").unwrap().to_string(),
-                days_to_retain: sub_matches
-                    .value_of("days_to_retain")
-                    .unwrap()
-                    .parse()
-                    .unwrap(),
-            };
-            let target =
-                mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
-            let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                source,
-                target,
-                simple_diff_transfer::SimpleDiffTransferConfig {
-                    progress,
-                    snapshot_config,
-                },
-            );
-            transfer.transfer().await.unwrap();
-        }
-        ("homebrew_bottles", Some(sub_matches)) => {
-            let source = homebrew::Homebrew {
-                api_base: sub_matches.value_of("api_base").unwrap().to_string(),
-            };
-            let target =
-                mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
-            let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                source,
-                target,
-                simple_diff_transfer::SimpleDiffTransferConfig {
-                    progress,
-                    snapshot_config,
-                },
-            );
-            transfer.transfer().await.unwrap();
-        }
-        ("dart_pub", Some(sub_matches)) => {
-            let source = dart::Dart {
-                base: sub_matches.value_of("base").unwrap().to_string(),
-                debug: matches.is_present("debug"),
-            };
-            let target =
-                mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
-            let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                source,
-                target,
-                simple_diff_transfer::SimpleDiffTransferConfig {
-                    progress,
-                    snapshot_config,
-                },
-            );
-            transfer.transfer().await.unwrap();
-        }
-        ("pytorch_wheels", Some(sub_matches)) => {
-            let source = html_scanner::HtmlScanner {
-                url: sub_matches.value_of("package_index").unwrap().to_string(),
-            };
-            let target =
-                mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
-            let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                source,
-                target,
-                simple_diff_transfer::SimpleDiffTransferConfig {
-                    progress,
-                    snapshot_config,
-                },
-            );
-            transfer.transfer().await.unwrap();
-        }
-        ("crates_io", Some(sub_matches)) => {
-            let source = crates_io::CratesIo {
-                zip_master: sub_matches.value_of("zip_master").unwrap().to_string(),
-                debug: matches.is_present("debug"),
-            };
-            let target =
-                mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
-            let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                source,
-                target,
-                simple_diff_transfer::SimpleDiffTransferConfig {
-                    progress,
-                    snapshot_config,
-                },
-            );
-            transfer.transfer().await.unwrap();
-        }
-        ("flutter_infra", Some(sub_matches)) => {
-            let source = rsync::Rsync {
-                base: sub_matches.value_of("base").unwrap().to_string(),
-                debug: matches.is_present("debug"),
-                ignore_prefix: "".to_string(),
-            };
-            let target =
-                mirror_intel::MirrorIntel::new(sub_matches.value_of("target").unwrap().to_string());
-            let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                source,
-                target,
-                simple_diff_transfer::SimpleDiffTransferConfig {
-                    progress,
-                    snapshot_config,
-                },
-            );
-            transfer.transfer().await.unwrap();
-        }
-        _ => {
-            println!("use ./mirror_clone --help to view commands");
-        }
+    let mut runtime = tokio::runtime::Builder::new();
+    runtime.threaded_scheduler();
+    if let Some(worker) = matches.value_of("workers") {
+        let worker = worker.parse().unwrap();
+        runtime.core_threads(worker);
+        runtime.max_threads(worker * 2);
     }
+    runtime.enable_all();
+    let mut runtime = runtime.build().unwrap();
+
+    runtime.block_on(async {
+        match matches.subcommand() {
+            ("pypi", Some(sub_matches)) => {
+                let source = pypi::Pypi {
+                    simple_base: sub_matches.value_of("simple_base").unwrap().to_string(),
+                    package_base: sub_matches.value_of("package_base").unwrap().to_string(),
+                    debug: matches.is_present("debug"),
+                };
+                let target = mirror_intel::MirrorIntel::new(
+                    sub_matches.value_of("target").unwrap().to_string(),
+                );
+                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                    source,
+                    target,
+                    simple_diff_transfer::SimpleDiffTransferConfig {
+                        progress,
+                        snapshot_config,
+                    },
+                );
+                transfer.transfer().await.unwrap();
+            }
+            ("rustup", Some(sub_matches)) => {
+                let source = rustup::Rustup {
+                    base: sub_matches.value_of("base").unwrap().to_string(),
+                    days_to_retain: sub_matches
+                        .value_of("days_to_retain")
+                        .unwrap()
+                        .parse()
+                        .unwrap(),
+                };
+                let target = mirror_intel::MirrorIntel::new(
+                    sub_matches.value_of("target").unwrap().to_string(),
+                );
+                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                    source,
+                    target,
+                    simple_diff_transfer::SimpleDiffTransferConfig {
+                        progress,
+                        snapshot_config,
+                    },
+                );
+                transfer.transfer().await.unwrap();
+            }
+            ("homebrew_bottles", Some(sub_matches)) => {
+                let source = homebrew::Homebrew {
+                    api_base: sub_matches.value_of("api_base").unwrap().to_string(),
+                };
+                let target = mirror_intel::MirrorIntel::new(
+                    sub_matches.value_of("target").unwrap().to_string(),
+                );
+                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                    source,
+                    target,
+                    simple_diff_transfer::SimpleDiffTransferConfig {
+                        progress,
+                        snapshot_config,
+                    },
+                );
+                transfer.transfer().await.unwrap();
+            }
+            ("dart_pub", Some(sub_matches)) => {
+                let source = dart::Dart {
+                    base: sub_matches.value_of("base").unwrap().to_string(),
+                    debug: matches.is_present("debug"),
+                };
+                let target = mirror_intel::MirrorIntel::new(
+                    sub_matches.value_of("target").unwrap().to_string(),
+                );
+                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                    source,
+                    target,
+                    simple_diff_transfer::SimpleDiffTransferConfig {
+                        progress,
+                        snapshot_config,
+                    },
+                );
+                transfer.transfer().await.unwrap();
+            }
+            ("pytorch_wheels", Some(sub_matches)) => {
+                let source = html_scanner::HtmlScanner {
+                    url: sub_matches.value_of("package_index").unwrap().to_string(),
+                };
+                let target = mirror_intel::MirrorIntel::new(
+                    sub_matches.value_of("target").unwrap().to_string(),
+                );
+                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                    source,
+                    target,
+                    simple_diff_transfer::SimpleDiffTransferConfig {
+                        progress,
+                        snapshot_config,
+                    },
+                );
+                transfer.transfer().await.unwrap();
+            }
+            ("crates_io", Some(sub_matches)) => {
+                let source = crates_io::CratesIo {
+                    zip_master: sub_matches.value_of("zip_master").unwrap().to_string(),
+                    debug: matches.is_present("debug"),
+                };
+                let target = mirror_intel::MirrorIntel::new(
+                    sub_matches.value_of("target").unwrap().to_string(),
+                );
+                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                    source,
+                    target,
+                    simple_diff_transfer::SimpleDiffTransferConfig {
+                        progress,
+                        snapshot_config,
+                    },
+                );
+                transfer.transfer().await.unwrap();
+            }
+            ("flutter_infra", Some(sub_matches)) => {
+                let source = rsync::Rsync {
+                    base: sub_matches.value_of("base").unwrap().to_string(),
+                    debug: matches.is_present("debug"),
+                    ignore_prefix: "".to_string(),
+                };
+                let target = mirror_intel::MirrorIntel::new(
+                    sub_matches.value_of("target").unwrap().to_string(),
+                );
+                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                    source,
+                    target,
+                    simple_diff_transfer::SimpleDiffTransferConfig {
+                        progress,
+                        snapshot_config,
+                    },
+                );
+                transfer.transfer().await.unwrap();
+            }
+            _ => {
+                println!("use ./mirror_clone --help to view commands");
+            }
+        }
+    })
 }
