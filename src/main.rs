@@ -11,6 +11,7 @@ mod pypi;
 mod rsync;
 mod rustup;
 mod simple_diff_transfer;
+mod timeout;
 mod traits;
 mod utils;
 

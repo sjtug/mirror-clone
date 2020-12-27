@@ -2,16 +2,19 @@ use indicatif::{MultiProgress, ProgressBar};
 use reqwest::ClientBuilder;
 
 use crate::error::{Error, Result};
+use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
 use crate::utils::{create_logger, spinner};
 use crate::{
     common::{Mission, SnapshotConfig},
     traits::{SnapshotStorage, SourceStorage, TargetStorage},
 };
-use rand::prelude::*;
 
 use futures_util::StreamExt;
+use rand::prelude::*;
 use slog::{debug, info, o, warn};
+
 use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct SimpleDiffTransferConfig {
@@ -143,12 +146,22 @@ where
             let logger = logger.clone();
 
             let func = async move {
-                let source_object = source.get_object(source_snapshot, &source_mission).await?;
-                if let Err(err) = target.put_object(source_object, &target_mission).await {
+                let source_object = source
+                    .get_object(source_snapshot, &source_mission)
+                    .timeout(Duration::from_secs(60))
+                    .await
+                    .into_result()?;
+                if let Err(err) = target
+                    .put_object(source_object, &target_mission)
+                    .timeout(Duration::from_secs(60))
+                    .await
+                    .into_result()
+                {
                     warn!(target_mission.logger, "error while transfer: {:?}", err);
                 }
                 Ok::<(), Error>(())
             };
+
             async move {
                 if let Err(err) = func.await {
                     warn!(logger, "failed to fetch index {:?}", err);

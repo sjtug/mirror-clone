@@ -1,6 +1,9 @@
 use crate::common::{Mission, SnapshotConfig};
 use crate::error::Result;
+use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
 use crate::traits::{SnapshotStorage, SourceStorage};
+
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -24,7 +27,16 @@ impl SnapshotStorage<String> for Homebrew {
         let client = mission.client;
 
         info!(logger, "fetching API json...");
-        let data = client.get(&self.api_base).send().await?.text().await?;
+        let data = client
+            .get(&self.api_base)
+            .send()
+            .timeout(Duration::from_secs(60))
+            .await
+            .into_result()?
+            .text()
+            .timeout(Duration::from_secs(60))
+            .await
+            .into_result()?;
 
         info!(logger, "parsing...");
         let json: Value = serde_json::from_str(&data).unwrap();
