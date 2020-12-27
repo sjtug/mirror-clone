@@ -24,7 +24,7 @@ impl SnapshotStorage<String> for HtmlScanner {
 
         info!(logger, "downloading web content...");
         let index = client.get(&self.url).send().await?.text().await?;
-        let matcher = Regex::new(r#"<a.*href="(.*?)".*>(.*?)</a>"#).unwrap();
+        let matcher = Regex::new(r#"<a.*href="(.*?)".*"#).unwrap();
 
         let snapshot: Vec<String> = matcher
             .captures_iter(&index)
