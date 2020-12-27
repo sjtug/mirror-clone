@@ -54,6 +54,7 @@ fn main() {
             (version: "1.0")
             (author: "Alex Chi <iskyzh@gmail.com>")
             (@arg api_base: --api_base +takes_value default_value("https://formulae.brew.sh/api/formula.json") "formula API")
+            (@arg arch: --arch +takes_value default_value("") "included architecture")
             (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/homebrew-bottles") "mirror-intel target")
         )
         (@subcommand dart_pub =>
@@ -146,6 +147,7 @@ fn main() {
             ("homebrew_bottles", Some(sub_matches)) => {
                 let source = homebrew::Homebrew {
                     api_base: sub_matches.value_of("api_base").unwrap().to_string(),
+                    arch: sub_matches.value_of("arch").unwrap().to_string(),
                 };
                 let target = mirror_intel::MirrorIntel::new(
                     sub_matches.value_of("target").unwrap().to_string(),

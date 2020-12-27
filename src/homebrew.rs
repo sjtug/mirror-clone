@@ -9,6 +9,7 @@ use slog::info;
 #[derive(Debug)]
 pub struct Homebrew {
     pub api_base: String,
+    pub arch: String,
 }
 
 #[async_trait]
@@ -48,6 +49,13 @@ impl SnapshotStorage<String> for Homebrew {
             .flat_map(|files| files.values())
             .filter_map(|bottle_urls| bottle_urls.get("url"))
             .filter_map(|url| url.as_str())
+            .filter(|url| {
+                if self.arch.is_empty() {
+                    true
+                } else {
+                    url.contains(&self.arch)
+                }
+            })
             .map(|url| url.to_string())
             .map(|url| url.replace("https://homebrew.bintray.com/", ""))
             .map(|url| url.replace("https://linuxbrew.bintray.com/", ""))
