@@ -4,6 +4,7 @@ mod common;
 mod crates_io;
 mod dart;
 mod error;
+mod github_release;
 mod homebrew;
 mod html_scanner;
 mod mirror_intel;
@@ -78,6 +79,14 @@ fn main() {
             (author: "Alex Chi <iskyzh@gmail.com>")
             (@arg base: --base +takes_value default_value("rsync://nanomirrors.tuna.tsinghua.edu.cn/flutter/flutter_infra/") "package base")
             (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/flutter_infra") "mirror-intel target")
+        )
+        (@subcommand github_release =>
+            (about: "mirror GitHub releases to siyuan mirror-intel with simple diff transfer")
+            (version: "1.0")
+            (author: "Alex Chi <iskyzh@gmail.com>")
+            (@arg repo: --repo +takes_value default_value("FreeCAD/FreeCAD") "GitHub repo")
+            (@arg version_to_retain: --version_to_retain +takes_value default_value("3") "version to retain")
+            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/github-release") "mirror-intel target")
         )
     )
     .get_matches();
@@ -221,6 +230,28 @@ fn main() {
                     base: sub_matches.value_of("base").unwrap().to_string(),
                     debug: matches.is_present("debug"),
                     ignore_prefix: "".to_string(),
+                };
+                let target = mirror_intel::MirrorIntel::new(
+                    sub_matches.value_of("target").unwrap().to_string(),
+                );
+                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                    source,
+                    target,
+                    simple_diff_transfer::SimpleDiffTransferConfig {
+                        progress,
+                        snapshot_config,
+                    },
+                );
+                transfer.transfer().await.unwrap();
+            }
+            ("github_release", Some(sub_matches)) => {
+                let source = github_release::GitHubRelease {
+                    repo: sub_matches.value_of("repo").unwrap().to_string(),
+                    version_to_retain: sub_matches
+                        .value_of("version_to_retain")
+                        .unwrap()
+                        .parse()
+                        .unwrap(),
                 };
                 let target = mirror_intel::MirrorIntel::new(
                     sub_matches.value_of("target").unwrap().to_string(),
