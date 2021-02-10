@@ -56,8 +56,8 @@ impl SnapshotStorage<String> for Rsync {
 
         let mut reader = BufReader::new(stdout).lines();
 
-        let result = tokio::spawn(async {
-            let status = child.await.map_err(|err| {
+        let result = tokio::spawn(async move {
+            let status = child.wait().await.map_err(|err| {
                 Error::ProcessError(format!("child process encountered an error: {:?}", err))
             })?;
             Ok::<_, Error>(status)
