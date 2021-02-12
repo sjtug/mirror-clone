@@ -7,16 +7,16 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "0.2", features = ["full"] }
-reqwest = { version = "0.10", features = ["stream"] }
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["stream"] }
 futures-util = "0.3"
 flate2 = "1.0"
 tar = "0.4"
-bytes = "0.6"
+bytes = "1.0"
 regex = "1"
 indicatif = "0.15"
 futures = "0.3"
-futures-retry = "0.5"
+futures-retry = "0.6"
 thiserror = "1.0"
 rand = "0.7"
 slog-term = "2.6"

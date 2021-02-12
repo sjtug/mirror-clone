@@ -101,15 +101,13 @@ fn main() {
             .unwrap(),
     };
 
-    let mut runtime = tokio::runtime::Builder::new();
-    runtime.threaded_scheduler();
+    let mut runtime = tokio::runtime::Builder::new_multi_thread();
     if let Some(worker) = matches.value_of("workers") {
         let worker = worker.parse().unwrap();
-        runtime.core_threads(worker);
-        runtime.max_threads(worker * 2);
+        runtime.worker_threads(worker);
     }
     runtime.enable_all();
-    let mut runtime = runtime.build().unwrap();
+    let runtime = runtime.build().unwrap();
 
     runtime.block_on(async {
         match matches.subcommand() {

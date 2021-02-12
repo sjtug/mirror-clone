@@ -63,7 +63,7 @@ impl TargetStorage<String> for MirrorIntel {
 
         if let Some(location) = headers.get("Location") {
             if !location.to_str().unwrap().contains("jcloud") {
-                tokio::time::delay_for(std::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
         }
 
@@ -71,7 +71,7 @@ impl TargetStorage<String> for MirrorIntel {
             let queue_length: u64 = queue_length.to_str().unwrap().parse().unwrap();
             if queue_length > 16384 {
                 warn!(mission.logger, "queue full, length={}", queue_length);
-                tokio::time::delay_for(std::time::Duration::from_secs(queue_length - 16384)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(queue_length - 16384)).await;
             }
         }
         Ok(())
