@@ -5,6 +5,7 @@ mod crates_io;
 mod dart;
 mod error;
 mod github_release;
+mod gradle;
 mod homebrew;
 mod html_scanner;
 mod mirror_intel;
@@ -87,6 +88,14 @@ fn main() {
             (@arg repo: --repo +takes_value default_value("FreeCAD/FreeCAD") "GitHub repo")
             (@arg version_to_retain: --version_to_retain +takes_value default_value("3") "version to retain")
             (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/github-release") "mirror-intel target")
+        )
+        (@subcommand gradle =>
+            (about: "mirror gradle distribution from brew.sh to siyuan mirror-intel with simple diff transfer")
+            (version: "1.0")
+            (author: "Alex Chi <iskyzh@gmail.com>")
+            (@arg api_base: --api_base +takes_value default_value("https://services.gradle.org/versions/all") "version API")
+            (@arg distribution_base: --distribution_base +takes_value default_value("https://services.gradle.org/distributions/") "distribution base")
+            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/gradle/distributions") "mirror-intel target")
         )
     )
     .get_matches();
@@ -250,6 +259,27 @@ fn main() {
                         .unwrap()
                         .parse()
                         .unwrap(),
+                };
+                let target = mirror_intel::MirrorIntel::new(
+                    sub_matches.value_of("target").unwrap().to_string(),
+                );
+                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
+                    source,
+                    target,
+                    simple_diff_transfer::SimpleDiffTransferConfig {
+                        progress,
+                        snapshot_config,
+                    },
+                );
+                transfer.transfer().await.unwrap();
+            }
+            ("gradle", Some(sub_matches)) => {
+                let source = gradle::Gradle {
+                    api_base: sub_matches.value_of("api_base").unwrap().to_string(),
+                    distribution_base: sub_matches
+                        .value_of("distribution_base")
+                        .unwrap()
+                        .to_string(),
                 };
                 let target = mirror_intel::MirrorIntel::new(
                     sub_matches.value_of("target").unwrap().to_string(),
