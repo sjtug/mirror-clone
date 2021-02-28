@@ -57,7 +57,11 @@ where
     pub async fn transfer(mut self) -> Result<()> {
         let logger = create_logger();
         let client = ClientBuilder::new()
-            .user_agent("mirror-clone / 0.1 (siyuan.internal.sjtug.org)")
+            .user_agent(format!(
+                "mirror-clone / 0.1 ({})",
+                std::env::var("MIRROR_CLONE_SITE").unwrap_or("mirror.sjtu.edu.cn".to_string())
+            ))
+            .connect_timeout(Duration::from_secs(10))
             .build()?;
         info!(logger, "using simple diff transfer"; "config" => format!("{:?}", self.config));
         info!(logger, "begin transfer"; "source" => self.source.info(), "target" => self.target.info());
