@@ -1,6 +1,8 @@
 # mirror-clone
 
-An all-in-one mirror utility
+An all-in-one mirror utility.
+
+For more information about our mirror service, refer to https://github.com/sjtug/mirror-docker-unified/wiki
 
 For legacy version, refer to legacy branch.
 
