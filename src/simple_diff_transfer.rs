@@ -187,15 +187,22 @@ where
         let mut updates = vec![];
         let mut deletions = vec![];
 
+        let mut max_info = 0;
         for result in classify(source_snapshot, target_snapshot) {
             match result {
                 Inclusion::Left(source) => {
-                    println!("+ {:?}", source.0);
+                    if max_info < 100 {
+                        info!(logger, "+ {:?}", source.0);
+                        max_info += 1;
+                    }
                     updates.push(source);
                 }
                 Inclusion::Both(_, _) => {}
                 Inclusion::Right(target) => {
-                    println!("- {:?}", target.0);
+                    if max_info < 100 {
+                        info!(logger, "- {:?}", target.0);
+                        max_info += 1;
+                    }
                     deletions.push(target);
                 }
             }
