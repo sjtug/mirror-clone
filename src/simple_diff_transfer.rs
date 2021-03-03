@@ -190,10 +190,12 @@ where
         for result in classify(source_snapshot, target_snapshot) {
             match result {
                 Inclusion::Left(source) => {
+                    println!("+ {:?}", source.0);
                     updates.push(source);
                 }
                 Inclusion::Both(_, _) => {}
                 Inclusion::Right(target) => {
+                    println!("- {:?}", target.0);
                     deletions.push(target);
                 }
             }

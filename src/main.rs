@@ -78,6 +78,9 @@ fn main() {
             Source::Homebrew(source) => {
                 transfer!(opts, source, transfer_config);
             }
+            Source::CratesIo(source) => {
+                transfer!(opts, source, transfer_config);
+            }
         }
     });
 }

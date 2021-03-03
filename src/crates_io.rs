@@ -1,11 +1,12 @@
-use crate::common::{Mission, SnapshotConfig, SnapshotPath};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
 use crate::error::Result;
-use crate::traits::SnapshotStorage;
+use crate::traits::{SnapshotStorage, SourceStorage};
 
 use async_trait::async_trait;
 use serde::Deserialize;
 use slog::info;
 use std::io::Read;
+use structopt::StructOpt;
 
 #[derive(Deserialize, Debug)]
 pub struct CratesIoPackage {
@@ -14,9 +15,16 @@ pub struct CratesIoPackage {
     cksum: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, StructOpt)]
 pub struct CratesIo {
+    #[structopt(
+        long,
+        default_value = "https://github.com/rust-lang/crates.io-index/archive/master.zip"
+    )]
     pub zip_master: String,
+    #[structopt(long, default_value = "https://static.crates.io/crates")]
+    pub crates_base: String,
+    #[structopt(long)]
     pub debug: bool,
 }
 
@@ -32,6 +40,7 @@ impl SnapshotStorage<SnapshotPath> for CratesIo {
         let client = mission.client;
 
         info!(logger, "fetching crates.io-index zip...");
+        progress.set_message("fetching crates.io-index zip...");
         let data = client.get(&self.zip_master).send().await?.bytes().await?;
         let mut data = std::io::Cursor::new(data);
         let mut buf = vec![];
@@ -42,9 +51,10 @@ impl SnapshotStorage<SnapshotPath> for CratesIo {
         loop {
             match zip::read::read_zipfile_from_stream(&mut data) {
                 Ok(Some(mut file)) => {
-                    progress.set_message(file.name());
+                    let mut is_first = true;
                     buf.clear();
                     file.read_to_end(&mut buf)?;
+
                     let mut de = serde_json::Deserializer::from_reader(&buf[..]);
                     while let Ok(package) = CratesIoPackage::deserialize(&mut de) {
                         let url = format!(
@@ -52,6 +62,10 @@ impl SnapshotStorage<SnapshotPath> for CratesIo {
                             crate = package.name,
                             version = package.vers
                         );
+                        if is_first {
+                            progress.set_message(&url);
+                            is_first = false;
+                        }
                         idx += 1;
                         progress.inc(1);
                         snapshot.push(url);
@@ -63,6 +77,7 @@ impl SnapshotStorage<SnapshotPath> for CratesIo {
             if self.debug && idx >= 100 {
                 break;
             }
+            tokio::task::yield_now().await;
         }
 
         progress.finish_with_message("done");
@@ -72,5 +87,12 @@ impl SnapshotStorage<SnapshotPath> for CratesIo {
 
     fn info(&self) -> String {
         format!("crates.io, {:?}", self)
+    }
+}
+
+#[async_trait]
+impl SourceStorage<SnapshotPath, TransferURL> for CratesIo {
+    async fn get_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<TransferURL> {
+        Ok(TransferURL(format!("{}/{}", self.crates_base, snapshot.0)))
     }
 }

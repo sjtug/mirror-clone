@@ -37,7 +37,7 @@ impl S3Config {
 pub struct S3Backend {
     config: S3Config,
     client: S3Client,
-    url_encode_map: Vec<(&'static str, &'static str)>,
+    mapper: Vec<(&'static str, &'static str)>,
 }
 
 fn jcloud_region(name: String, endpoint: String) -> Region {
@@ -52,34 +52,12 @@ fn get_s3_client(name: String, endpoint: String) -> S3Client {
 }
 
 impl S3Backend {
-    fn generate_url_encode_map() -> Vec<(&'static str, &'static str)> {
-        // reference: https://github.com/GeorgePhillips/node-s3-url-encode/blob/master/index.js
-        let mut map = vec![];
-        map.push(("+", "%2B"));
-        map.push(("!", "%21"));
-        map.push(("\"", "%22"));
-        map.push(("#", "%23"));
-        map.push(("$", "%24"));
-        map.push(("&", "%26"));
-        map.push(("'", "%27"));
-        map.push(("(", "%28"));
-        map.push((")", "%29"));
-        map.push(("*", "%2A"));
-        map.push((",", "%2C"));
-        map.push((":", "%3A"));
-        map.push((";", "%3B"));
-        map.push(("=", "%3D"));
-        map.push(("?", "%3F"));
-        map.push(("@", "%40"));
-        map
-    }
-
     pub fn new(config: S3Config) -> Self {
         let client = get_s3_client("jCloud S3".to_string(), config.endpoint.clone());
         Self {
             config,
             client,
-            url_encode_map: Self::generate_url_encode_map(),
+            mapper: crate::utils::generate_s3_url_encode_map(),
         }
     }
 
@@ -106,6 +84,8 @@ impl SnapshotStorage<SnapshotPath> for S3Backend {
         let mut snapshot = vec![];
 
         let s3_prefix_base = format!("{}/", self.config.prefix);
+        let mut total_size: u64 = 0;
+        let gen_map = crate::utils::generate_s3_url_reverse_encode_map();
 
         loop {
             let req = ListObjectsV2Request {
@@ -119,12 +99,13 @@ impl SnapshotStorage<SnapshotPath> for S3Backend {
 
             let mut first_key = true;
             for item in resp.contents.unwrap() {
+                if let Some(size) = item.size {
+                    total_size += size as u64;
+                }
                 let key = item.key.unwrap();
                 if key.starts_with(&s3_prefix_base) {
-                    let mut key = key[s3_prefix_base.len()..].to_string();
-                    for (ch, seq) in &self.url_encode_map {
-                        key = key.replace(ch, seq);
-                    }
+                    let key = key[s3_prefix_base.len()..].to_string();
+                    let key = crate::utils::rewrite_url_string(&gen_map, &key);
                     if first_key {
                         first_key = false;
                         progress.set_message(&key);
@@ -143,6 +124,13 @@ impl SnapshotStorage<SnapshotPath> for S3Backend {
         }
 
         progress.finish_with_message("done");
+
+        info!(
+            logger,
+            "total size: {}B or {}G",
+            total_size,
+            total_size as f64 / 1000.0 / 1000.0 / 1000.0
+        );
 
         Ok(snapshot)
     }
@@ -167,7 +155,11 @@ impl TargetStorage<SnapshotPath, ByteStream> for S3Backend {
             .map_ok(|bytes| bytes.freeze());
         let req = PutObjectRequest {
             bucket: self.config.bucket.clone(),
-            key: format!("{}/{}", self.config.prefix, snapshot.0),
+            key: format!(
+                "{}/{}",
+                self.config.prefix,
+                crate::utils::rewrite_url_string(&self.mapper, &snapshot.0)
+            ),
             body: Some(rusoto_s3::StreamingBody::new(body)),
             metadata: Some(self.gen_metadata()),
             content_length: Some(content_length as i64),

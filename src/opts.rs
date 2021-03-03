@@ -1,3 +1,4 @@
+use crate::crates_io::CratesIo as CratesIoConfig;
 use crate::homebrew::Homebrew as HomebrewConfig;
 use crate::pypi::Pypi as PypiConfig;
 
@@ -14,6 +15,8 @@ pub enum Source {
     Pypi(PypiConfig),
     #[structopt(about = "Homebrew bottles")]
     Homebrew(HomebrewConfig),
+    #[structopt(about = "crates.io")]
+    CratesIo(CratesIoConfig),
 }
 
 #[derive(Debug)]
