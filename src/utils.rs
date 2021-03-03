@@ -28,3 +28,11 @@ pub fn bar() -> ProgressStyle {
 pub fn snapshot_string_to_path(snapshot: Vec<String>) -> Vec<SnapshotPath> {
     snapshot.into_iter().map(|x| SnapshotPath(x)).collect()
 }
+
+pub fn user_agent() -> String {
+    format!(
+        "mirror-clone / {} ({})",
+        env!("CARGO_PKG_VERSION"),
+        std::env::var("MIRROR_CLONE_SITE").expect("No MIRROR_CLONE_SITE env variable")
+    )
+}

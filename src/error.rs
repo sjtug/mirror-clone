@@ -18,6 +18,20 @@ pub enum Error {
     TimeoutError(()),
     #[error("Storage Error {0}")]
     StorageError(String),
+    #[error("Rusoto Error {0}")]
+    RusotoError(String),
+    #[error("Configure Error {0}")]
+    ConfigureError(String),
+    #[error("HTTP Error {0}")]
+    HTTPError(reqwest::StatusCode),
+    #[error("Pipe Error {0}")]
+    PipeError(String),
+}
+
+impl<T: std::fmt::Debug> From<rusoto_core::RusotoError<T>> for Error {
+    fn from(error: rusoto_core::RusotoError<T>) -> Self {
+        Error::RusotoError(format!("Rusoto Error: {:?}", error))
+    }
 }
 
 pub type Result<T> = result::Result<T, Error>;

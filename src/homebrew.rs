@@ -1,17 +1,22 @@
-use crate::common::{Mission, SnapshotConfig, SnapshotPath};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
 use crate::error::Result;
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
-use crate::traits::SnapshotStorage;
+use crate::traits::{SnapshotStorage, SourceStorage};
 
 use std::time::Duration;
 
 use async_trait::async_trait;
 use serde_json::Value;
 use slog::info;
+use structopt::StructOpt;
 
-#[derive(Debug)]
+#[derive(Debug, StructOpt)]
 pub struct Homebrew {
+    #[structopt(long, default_value = "https://formulae.brew.sh/api/formula.json")]
     pub api_base: String,
+    #[structopt(long, default_value = "https://homebrew.bintray.com")]
+    pub bottles_base: String,
+    #[structopt(long, default_value = "all")]
     pub arch: String,
 }
 
@@ -27,6 +32,7 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
         let client = mission.client;
 
         info!(logger, "fetching API json...");
+        progress.set_message("fetching API json...");
         let data = client
             .get(&self.api_base)
             .send()
@@ -41,6 +47,11 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
         info!(logger, "parsing...");
         let json: Value = serde_json::from_str(&data).unwrap();
         let packages = json.as_array().unwrap();
+        let bottles_base = if self.bottles_base.ends_with("/") {
+            self.bottles_base.clone()
+        } else {
+            format!("{}/", self.bottles_base)
+        };
         let snapshot: Vec<String> = packages
             .into_iter()
             .filter_map(|package| package.as_object())
@@ -61,16 +72,15 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
             .flat_map(|files| files.values())
             .filter_map(|bottle_urls| bottle_urls.get("url"))
             .filter_map(|url| url.as_str())
-            .filter(|url| {
-                if self.arch.is_empty() {
-                    true
+            .filter(|url| self.arch.is_empty() || self.arch == "all" || url.contains(&self.arch))
+            .map(|url| url.to_string())
+            .filter_map(|url| {
+                if url.starts_with(&bottles_base) {
+                    Some(url[bottles_base.len()..].to_string())
                 } else {
-                    url.contains(&self.arch)
+                    None
                 }
             })
-            .map(|url| url.to_string())
-            .map(|url| url.replace("https://homebrew.bintray.com/", ""))
-            .map(|url| url.replace("https://linuxbrew.bintray.com/", ""))
             .collect();
 
         progress.finish_with_message("done");
@@ -80,5 +90,12 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
 
     fn info(&self) -> String {
         format!("homebrew, {:?}", self)
+    }
+}
+
+#[async_trait]
+impl SourceStorage<SnapshotPath, TransferURL> for Homebrew {
+    async fn get_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<TransferURL> {
+        Ok(TransferURL(format!("{}/{}", self.bottles_base, snapshot.0)))
     }
 }

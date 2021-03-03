@@ -8,15 +8,22 @@ use crate::traits::{SnapshotStorage, SourceStorage, TargetStorage};
 use crate::utils::{create_logger, spinner};
 
 use futures_util::StreamExt;
+use iter_set::{classify, Inclusion};
 use rand::prelude::*;
 use slog::{debug, info, o, warn};
 
 use std::sync::Arc;
 use std::time::Duration;
 
+enum PlanType {
+    Update,
+    Delete,
+}
+
 #[derive(Debug)]
 pub struct SimpleDiffTransferConfig {
     pub progress: bool,
+    pub concurrent_transfer: usize,
     pub snapshot_config: SnapshotConfig,
 }
 
@@ -46,9 +53,10 @@ where
     }
 
     fn debug_snapshot(logger: slog::Logger, snapshot: &[SnapshotPath]) {
-        let selected: Vec<_> = snapshot
+        let mut selected: Vec<_> = snapshot
             .choose_multiple(&mut rand::thread_rng(), 50)
             .collect();
+        selected.sort();
         for item in selected {
             debug!(logger, "{}", item.0);
         }
@@ -57,10 +65,7 @@ where
     pub async fn transfer(mut self) -> Result<()> {
         let logger = create_logger();
         let client = ClientBuilder::new()
-            .user_agent(format!(
-                "mirror-clone / 0.1 ({})",
-                std::env::var("MIRROR_CLONE_SITE").unwrap_or("mirror.sjtu.edu.cn".to_string())
-            ))
+            .user_agent(crate::utils::user_agent())
             .connect_timeout(Duration::from_secs(10))
             .build()?;
         info!(logger, "using simple diff transfer"; "config" => format!("{:?}", self.config));
@@ -104,13 +109,6 @@ where
         let source_snapshot = source_snapshot?;
         let target_snapshot = target_snapshot?;
 
-        info!(
-            logger,
-            "source {} objects, target {} objects",
-            source_snapshot.len(),
-            target_snapshot.len()
-        );
-
         Self::debug_snapshot(logger.clone(), &source_snapshot);
         Self::debug_snapshot(logger.clone(), &target_snapshot);
 
@@ -138,15 +136,21 @@ where
 
         info!(logger, "generating transfer plan...");
 
+        let source_count = source_snapshot.len();
+
         let source_sort = tokio::task::spawn_blocking(move || {
             let mut source_snapshot: Vec<SnapshotPath> = source_snapshot;
             source_snapshot.sort();
+            source_snapshot.dedup();
             source_snapshot
         });
+
+        let target_count = target_snapshot.len();
 
         let target_sort = tokio::task::spawn_blocking(move || {
             let mut target_snapshot: Vec<SnapshotPath> = target_snapshot;
             target_snapshot.sort();
+            target_snapshot.dedup();
             target_snapshot
         });
 
@@ -157,11 +161,61 @@ where
         let target_snapshot = target_snapshot
             .map_err(|err| Error::ProcessError(format!("error while sorting: {:?}", err)))?;
 
+        if source_count != source_snapshot.len() {
+            warn!(
+                logger,
+                "source: {} duplicated items",
+                source_count - source_snapshot.len()
+            );
+        }
+
+        if target_count != target_snapshot.len() {
+            warn!(
+                logger,
+                "target: {} duplicated items",
+                target_count - target_snapshot.len()
+            );
+        }
+
+        info!(
+            logger,
+            "source {} objects -> target {} objects",
+            source_snapshot.len(),
+            target_snapshot.len()
+        );
+
+        let mut updates = vec![];
+        let mut deletions = vec![];
+
+        for result in classify(source_snapshot, target_snapshot) {
+            match result {
+                Inclusion::Left(source) => {
+                    updates.push(source);
+                }
+                Inclusion::Both(_, _) => {}
+                Inclusion::Right(target) => {
+                    deletions.push(target);
+                }
+            }
+        }
+
+        info!(
+            logger,
+            "update {} objects, delete {} objects",
+            updates.len(),
+            deletions.len()
+        );
+
+        info!(logger, "updating objects");
+
         let source = Arc::new(self.source);
         let target = Arc::new(self.target);
 
-        let map_snapshot = |source_snapshot: SnapshotPath| {
-            progress.set_message(&source_snapshot.0);
+        progress.set_length(updates.len() as u64);
+        progress.set_position(0);
+
+        let map_snapshot = |snapshot: SnapshotPath, plan: PlanType| {
+            progress.set_message(&snapshot.0);
             let source = source.clone();
             let target = target.clone();
             let source_mission = source_mission.clone();
@@ -169,31 +223,73 @@ where
             let logger = logger.clone();
 
             let func = async move {
-                let source_object = source
-                    .get_object(&source_snapshot, &source_mission)
-                    .timeout(Duration::from_secs(60))
-                    .await
-                    .into_result()?;
-                if let Err(err) = target
-                    .put_object(&source_snapshot, source_object, &target_mission)
-                    .timeout(Duration::from_secs(60))
-                    .await
-                    .into_result()
-                {
-                    warn!(target_mission.logger, "error while transfer: {:?}", err);
+                match plan {
+                    PlanType::Update => match source.get_object(&snapshot, &source_mission).await {
+                        Ok(source_object) => {
+                            if let Err(err) = target
+                                .put_object(&snapshot, source_object, &target_mission)
+                                .await
+                            {
+                                warn!(
+                                    target_mission.logger,
+                                    "error while put {}: {:?}", snapshot.0, err
+                                );
+                            }
+                        }
+                        Err(err) => {
+                            warn!(
+                                target_mission.logger,
+                                "error while get {}: {:?}", snapshot.0, err
+                            );
+                        }
+                    },
+                    PlanType::Delete => {
+                        if let Err(err) = target
+                            .delete_object(&snapshot, &target_mission)
+                            .timeout(Duration::from_secs(60))
+                            .await
+                            .into_result()
+                        {
+                            warn!(
+                                target_mission.logger,
+                                "error while delete {}: {:?}", snapshot.0, err
+                            );
+                        }
+                    }
                 }
+
                 Ok::<(), Error>(())
             };
 
             async move {
                 if let Err(err) = func.await {
-                    warn!(logger, "failed to fetch index {:?}", err);
+                    warn!(logger, "failed to transfer {:?}", err);
                 }
             }
         };
 
-        let mut results = futures::stream::iter(source_snapshot.into_iter().map(map_snapshot))
-            .buffer_unordered(128);
+        let mut results = futures::stream::iter(
+            updates
+                .into_iter()
+                .map(|plan| map_snapshot(plan, PlanType::Update)),
+        )
+        .buffer_unordered(self.config.concurrent_transfer);
+
+        while let Some(_x) = results.next().await {
+            progress.inc(1);
+        }
+
+        info!(logger, "deleting objects");
+
+        progress.set_length(deletions.len() as u64);
+        progress.set_position(0);
+
+        let mut results = futures::stream::iter(
+            deletions
+                .into_iter()
+                .map(|plan| map_snapshot(plan, PlanType::Delete)),
+        )
+        .buffer_unordered(self.config.concurrent_transfer);
 
         while let Some(_x) = results.next().await {
             progress.inc(1);

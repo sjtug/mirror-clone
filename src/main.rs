@@ -9,294 +9,75 @@ mod gradle;
 mod homebrew;
 mod html_scanner;
 mod mirror_intel;
+mod opts;
 mod pypi;
 mod rsync;
 mod rustup;
+mod s3;
 mod simple_diff_transfer;
+mod stream_pipe;
 mod timeout;
 mod traits;
 mod utils;
 
-use clap::clap_app;
 use common::SnapshotConfig;
+use mirror_intel::MirrorIntel;
+use opts::{Source, Target};
+use s3::S3Backend;
+use simple_diff_transfer::SimpleDiffTransfer;
+use structopt::StructOpt;
+
+macro_rules! transfer {
+    ($opts: expr, $source: expr, $transfer_config: expr) => {
+        match $opts.target_type {
+            Target::Intel => {
+                let target: MirrorIntel = $opts.mirror_intel_config.into();
+                let transfer = SimpleDiffTransfer::new($source, target, $transfer_config);
+                transfer.transfer().await.unwrap();
+            }
+            Target::S3 => {
+                let source = stream_pipe::ByteStreamPipe {
+                    source: $source,
+                    buffer_path: $opts.s3_config.s3_buffer_path.clone().unwrap(),
+                };
+                let target: S3Backend = $opts.s3_config.into();
+                let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
+                transfer.transfer().await.unwrap();
+            }
+        }
+    };
+}
 
 fn main() {
-    let matches = clap_app!(mirror_clone =>
-        (version: "1.0")
-        (author: "Alex Chi <iskyzh@gmail.com>")
-        (about: "An all-in-one mirror utility by SJTUG")
-        (@arg progress: --progress ... "enable progress bar")
-        (@arg debug: --debug ... "enable debug mode")
-        (@arg workers: --workers +takes_value "workers")
-        (@arg concurrent_resolve: --concurrent_resolve +takes_value default_value("256")  "maximum concurrent resolving number")
-        (@subcommand pypi =>
-            (about: "mirror pypi from tuna to siyuan mirror-intel with simple diff transfer")
-            (version: "1.0")
-            (author: "Alex Chi <iskyzh@gmail.com>")
-            (@arg simple_base: --simple_base +takes_value default_value("https://nanomirrors.tuna.tsinghua.edu.cn/pypi/web/simple") "simple base")
-            (@arg package_base: --package_base +takes_value default_value("https://nanomirrors.tuna.tsinghua.edu.cn/pypi/web/packages") "package base")
-            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/pypi-packages") "mirror-intel target")
-        )
-        (@subcommand pytorch_wheels =>
-            (about: "mirror pytorch stable from download.pytorch.org to siyuan mirror-intel with simple diff transfer")
-            (version: "1.0")
-            (author: "Alex Chi <iskyzh@gmail.com>")
-            (@arg package_index: --simple_base +takes_value default_value("https://download.pytorch.org/whl/torch_stable.html") "package index")
-            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/pytorch-wheels") "mirror-intel target")
-        )
-        (@subcommand rustup =>
-            (about: "mirror rustup from static.rust-lang.org to siyuan mirror-intel with simple diff transfer")
-            (version: "1.0")
-            (author: "Alex Chi <iskyzh@gmail.com>")
-            (@arg base: --base +takes_value default_value("https://static.rust-lang.org") "package base")
-            (@arg days_to_retain: --days_to_retain +takes_value default_value("30") "days to retain")
-            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/rust-static") "mirror-intel target")
-        )
-        (@subcommand homebrew_bottles =>
-            (about: "mirror homebrew_bottles from brew.sh to siyuan mirror-intel with simple diff transfer")
-            (version: "1.0")
-            (author: "Alex Chi <iskyzh@gmail.com>")
-            (@arg api_base: --api_base +takes_value default_value("https://formulae.brew.sh/api/formula.json") "formula API")
-            (@arg arch: --arch +takes_value default_value("") "included architecture")
-            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/homebrew-bottles") "mirror-intel target")
-        )
-        (@subcommand dart_pub =>
-            (about: "mirror dart_pub from tuna to siyuan mirror-intel with simple diff transfer")
-            (version: "1.0")
-            (author: "Alex Chi <iskyzh@gmail.com>")
-            (@arg base: --base +takes_value default_value("https://mirrors.tuna.tsinghua.edu.cn/dart-pub") "package api base")
-            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/dart-pub") "mirror-intel target")
-        )
-        (@subcommand crates_io =>
-            (about: "mirror crates.io from GitHub to siyuan mirror-intel with simple diff transfer")
-            (version: "1.0")
-            (author: "Alex Chi <iskyzh@gmail.com>")
-            (@arg zip_master: --zip_master +takes_value default_value("https://github.com/rust-lang/crates.io-index/archive/master.zip") "zip of crates.io-index master")
-            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/crates.io/crates") "mirror-intel target")
-        )
-        (@subcommand flutter_infra =>
-            (about: "mirror flutter_infra from tuna to siyuan mirror-intel with simple diff transfer")
-            (version: "1.0")
-            (author: "Alex Chi <iskyzh@gmail.com>")
-            (@arg base: --base +takes_value default_value("rsync://nanomirrors.tuna.tsinghua.edu.cn/flutter/flutter_infra/") "package base")
-            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/flutter_infra") "mirror-intel target")
-        )
-        (@subcommand github_release =>
-            (about: "mirror GitHub releases to siyuan mirror-intel with simple diff transfer")
-            (version: "1.0")
-            (author: "Alex Chi <iskyzh@gmail.com>")
-            (@arg repo: --repo +takes_value default_value("FreeCAD/FreeCAD") "GitHub repo")
-            (@arg version_to_retain: --version_to_retain +takes_value default_value("3") "version to retain")
-            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/github-release") "mirror-intel target")
-        )
-        (@subcommand gradle =>
-            (about: "mirror gradle distribution from brew.sh to siyuan mirror-intel with simple diff transfer")
-            (version: "1.0")
-            (author: "Alex Chi <iskyzh@gmail.com>")
-            (@arg api_base: --api_base +takes_value default_value("https://services.gradle.org/versions/all") "version API")
-            (@arg distribution_base: --distribution_base +takes_value default_value("https://services.gradle.org/distributions/") "distribution base")
-            (@arg target: --target +takes_value default_value("https://siyuan.internal.sjtug.org/gradle/distributions") "mirror-intel target")
-        )
-    )
-    .get_matches();
+    let opts: opts::Opts = opts::Opts::from_args();
 
-    let progress = matches.is_present("progress");
-
-    let snapshot_config = SnapshotConfig {
-        concurrent_resolve: matches
-            .value_of("concurrent_resolve")
-            .unwrap()
-            .parse()
-            .unwrap(),
-    };
-
+    // create runtime
     let mut runtime = tokio::runtime::Builder::new_multi_thread();
-    if let Some(worker) = matches.value_of("workers") {
-        let worker = worker.parse().unwrap();
+    if let Some(worker) = opts.workers {
         runtime.worker_threads(worker);
     }
     runtime.enable_all();
+
     let runtime = runtime.build().unwrap();
 
+    // parse config
+    let snapshot_config = SnapshotConfig {
+        concurrent_resolve: opts.concurrent_resolve,
+    };
+    let transfer_config = simple_diff_transfer::SimpleDiffTransferConfig {
+        progress: opts.progress,
+        concurrent_transfer: opts.concurrent_transfer,
+        snapshot_config,
+    };
+
     runtime.block_on(async {
-        match matches.subcommand() {
-            ("pypi", Some(sub_matches)) => {
-                let source = pypi::Pypi {
-                    simple_base: sub_matches.value_of("simple_base").unwrap().to_string(),
-                    package_base: sub_matches.value_of("package_base").unwrap().to_string(),
-                    debug: matches.is_present("debug"),
-                };
-                let target = mirror_intel::MirrorIntel::new(
-                    sub_matches.value_of("target").unwrap().to_string(),
-                );
-                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                    source,
-                    target,
-                    simple_diff_transfer::SimpleDiffTransferConfig {
-                        progress,
-                        snapshot_config,
-                    },
-                );
-                transfer.transfer().await.unwrap();
+        match opts.source {
+            Source::Pypi(source) => {
+                transfer!(opts, source, transfer_config);
             }
-            ("rustup", Some(sub_matches)) => {
-                let source = rustup::Rustup {
-                    base: sub_matches.value_of("base").unwrap().to_string(),
-                    days_to_retain: sub_matches
-                        .value_of("days_to_retain")
-                        .unwrap()
-                        .parse()
-                        .unwrap(),
-                };
-                let target = mirror_intel::MirrorIntel::new(
-                    sub_matches.value_of("target").unwrap().to_string(),
-                );
-                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                    source,
-                    target,
-                    simple_diff_transfer::SimpleDiffTransferConfig {
-                        progress,
-                        snapshot_config,
-                    },
-                );
-                transfer.transfer().await.unwrap();
-            }
-            ("homebrew_bottles", Some(sub_matches)) => {
-                let source = homebrew::Homebrew {
-                    api_base: sub_matches.value_of("api_base").unwrap().to_string(),
-                    arch: sub_matches.value_of("arch").unwrap().to_string(),
-                };
-                let target = mirror_intel::MirrorIntel::new(
-                    sub_matches.value_of("target").unwrap().to_string(),
-                );
-                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                    source,
-                    target,
-                    simple_diff_transfer::SimpleDiffTransferConfig {
-                        progress,
-                        snapshot_config,
-                    },
-                );
-                transfer.transfer().await.unwrap();
-            }
-            ("dart_pub", Some(sub_matches)) => {
-                let source = dart::Dart {
-                    base: sub_matches.value_of("base").unwrap().to_string(),
-                    debug: matches.is_present("debug"),
-                };
-                let target = mirror_intel::MirrorIntel::new(
-                    sub_matches.value_of("target").unwrap().to_string(),
-                );
-                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                    source,
-                    target,
-                    simple_diff_transfer::SimpleDiffTransferConfig {
-                        progress,
-                        snapshot_config,
-                    },
-                );
-                transfer.transfer().await.unwrap();
-            }
-            ("pytorch_wheels", Some(sub_matches)) => {
-                let source = html_scanner::HtmlScanner {
-                    url: sub_matches.value_of("package_index").unwrap().to_string(),
-                };
-                let target = mirror_intel::MirrorIntel::new(
-                    sub_matches.value_of("target").unwrap().to_string(),
-                );
-                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                    source,
-                    target,
-                    simple_diff_transfer::SimpleDiffTransferConfig {
-                        progress,
-                        snapshot_config,
-                    },
-                );
-                transfer.transfer().await.unwrap();
-            }
-            ("crates_io", Some(sub_matches)) => {
-                let source = crates_io::CratesIo {
-                    zip_master: sub_matches.value_of("zip_master").unwrap().to_string(),
-                    debug: matches.is_present("debug"),
-                };
-                let target = mirror_intel::MirrorIntel::new(
-                    sub_matches.value_of("target").unwrap().to_string(),
-                );
-                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                    source,
-                    target,
-                    simple_diff_transfer::SimpleDiffTransferConfig {
-                        progress,
-                        snapshot_config,
-                    },
-                );
-                transfer.transfer().await.unwrap();
-            }
-            ("flutter_infra", Some(sub_matches)) => {
-                let source = rsync::Rsync {
-                    base: sub_matches.value_of("base").unwrap().to_string(),
-                    debug: matches.is_present("debug"),
-                    ignore_prefix: "".to_string(),
-                };
-                let target = mirror_intel::MirrorIntel::new(
-                    sub_matches.value_of("target").unwrap().to_string(),
-                );
-                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                    source,
-                    target,
-                    simple_diff_transfer::SimpleDiffTransferConfig {
-                        progress,
-                        snapshot_config,
-                    },
-                );
-                transfer.transfer().await.unwrap();
-            }
-            ("github_release", Some(sub_matches)) => {
-                let source = github_release::GitHubRelease {
-                    repo: sub_matches.value_of("repo").unwrap().to_string(),
-                    version_to_retain: sub_matches
-                        .value_of("version_to_retain")
-                        .unwrap()
-                        .parse()
-                        .unwrap(),
-                };
-                let target = mirror_intel::MirrorIntel::new(
-                    sub_matches.value_of("target").unwrap().to_string(),
-                );
-                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                    source,
-                    target,
-                    simple_diff_transfer::SimpleDiffTransferConfig {
-                        progress,
-                        snapshot_config,
-                    },
-                );
-                transfer.transfer().await.unwrap();
-            }
-            ("gradle", Some(sub_matches)) => {
-                let source = gradle::Gradle {
-                    api_base: sub_matches.value_of("api_base").unwrap().to_string(),
-                    distribution_base: sub_matches
-                        .value_of("distribution_base")
-                        .unwrap()
-                        .to_string(),
-                };
-                let target = mirror_intel::MirrorIntel::new(
-                    sub_matches.value_of("target").unwrap().to_string(),
-                );
-                let transfer = simple_diff_transfer::SimpleDiffTransfer::new(
-                    source,
-                    target,
-                    simple_diff_transfer::SimpleDiffTransferConfig {
-                        progress,
-                        snapshot_config,
-                    },
-                );
-                transfer.transfer().await.unwrap();
-            }
-            _ => {
-                println!("use ./mirror_clone --help to view commands");
+            Source::Homebrew(source) => {
+                transfer!(opts, source, transfer_config);
             }
         }
-    })
+    });
 }
