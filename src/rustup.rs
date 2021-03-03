@@ -1,4 +1,4 @@
-use crate::common::{Mission, SnapshotConfig};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferPath};
 use crate::error::{Error, Result};
 use crate::traits::{SnapshotStorage, SourceStorage};
 use async_trait::async_trait;
@@ -18,8 +18,12 @@ fn day_earlier(date_time: DateTime<Utc>, days: i64) -> Option<DateTime<Utc>> {
 }
 
 #[async_trait]
-impl SnapshotStorage<String> for Rustup {
-    async fn snapshot(&mut self, mission: Mission, config: &SnapshotConfig) -> Result<Vec<String>> {
+impl SnapshotStorage<SnapshotPath> for Rustup {
+    async fn snapshot(
+        &mut self,
+        mission: Mission,
+        config: &SnapshotConfig,
+    ) -> Result<Vec<SnapshotPath>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -84,17 +88,10 @@ impl SnapshotStorage<String> for Rustup {
 
         progress.finish_with_message("done");
 
-        Ok(snapshot)
+        Ok(crate::utils::snapshot_string_to_path(snapshot))
     }
 
     fn info(&self) -> String {
         format!("pypi, {:?}", self)
-    }
-}
-
-#[async_trait]
-impl SourceStorage<String, String> for Rustup {
-    async fn get_object(&self, snapshot: String, _mission: &Mission) -> Result<String> {
-        Ok(snapshot)
     }
 }

@@ -1,4 +1,4 @@
-use crate::common::{Mission, SnapshotConfig};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferPath};
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, SourceStorage};
 
@@ -12,12 +12,12 @@ pub struct HtmlScanner {
 }
 
 #[async_trait]
-impl SnapshotStorage<String> for HtmlScanner {
+impl SnapshotStorage<SnapshotPath> for HtmlScanner {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<SnapshotPath>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -33,17 +33,10 @@ impl SnapshotStorage<String> for HtmlScanner {
 
         progress.finish_with_message("done");
 
-        Ok(snapshot)
+        Ok(crate::utils::snapshot_string_to_path(snapshot))
     }
 
     fn info(&self) -> String {
         format!("html_scanner, {:?}", self)
-    }
-}
-
-#[async_trait]
-impl SourceStorage<String, String> for HtmlScanner {
-    async fn get_object(&self, snapshot: String, _mission: &Mission) -> Result<String> {
-        Ok(snapshot)
     }
 }

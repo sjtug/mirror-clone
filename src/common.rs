@@ -12,3 +12,9 @@ pub struct Mission {
 pub struct SnapshotConfig {
     pub concurrent_resolve: usize,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SnapshotPath(pub String);
+
+#[derive(Debug)]
+pub struct TransferPath(pub String);

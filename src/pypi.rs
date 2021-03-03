@@ -1,6 +1,5 @@
-use crate::common::{Mission, SnapshotConfig};
-use crate::error::Error;
-use crate::error::Result;
+use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferPath};
+use crate::error::{Error, Result};
 use crate::traits::{SnapshotStorage, SourceStorage};
 use crate::utils::bar;
 
@@ -17,8 +16,12 @@ pub struct Pypi {
 }
 
 #[async_trait]
-impl SnapshotStorage<String> for Pypi {
-    async fn snapshot(&mut self, mission: Mission, config: &SnapshotConfig) -> Result<Vec<String>> {
+impl SnapshotStorage<SnapshotPath> for Pypi {
+    async fn snapshot(
+        &mut self,
+        mission: Mission,
+        config: &SnapshotConfig,
+    ) -> Result<Vec<SnapshotPath>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -89,17 +92,10 @@ impl SnapshotStorage<String> for Pypi {
 
         progress.finish_with_message("done");
 
-        Ok(snapshot)
+        Ok(crate::utils::snapshot_string_to_path(snapshot))
     }
 
     fn info(&self) -> String {
         format!("pypi, {:?}", self)
-    }
-}
-
-#[async_trait]
-impl SourceStorage<String, String> for Pypi {
-    async fn get_object(&self, snapshot: String, _mission: &Mission) -> Result<String> {
-        Ok(snapshot)
     }
 }
