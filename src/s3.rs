@@ -34,10 +34,15 @@ impl S3Config {
     }
 }
 
+/// This backend has only been tested with SJTU S3 service, which is
+/// (possibly) set up with Ceph. Unlike official S3 protocol, SJTU
+/// S3 service supports special characters in key. For example, if
+/// we put `go@1.10-1.10.8.catalina.bottle.2.tar.gz` into SJTU S3,
+/// the `@` character won't be ignored. You may access it either at
+/// `go@...` or `go%40...` on HTTP.
 pub struct S3Backend {
     config: S3Config,
     client: S3Client,
-    mapper: Vec<(&'static str, &'static str)>,
 }
 
 fn jcloud_region(name: String, endpoint: String) -> Region {
@@ -54,11 +59,7 @@ fn get_s3_client(name: String, endpoint: String) -> S3Client {
 impl S3Backend {
     pub fn new(config: S3Config) -> Self {
         let client = get_s3_client("jCloud S3".to_string(), config.endpoint.clone());
-        Self {
-            config,
-            client,
-            mapper: crate::utils::generate_s3_url_encode_map(),
-        }
+        Self { config, client }
     }
 
     pub fn gen_metadata(&self) -> HashMap<String, String> {
@@ -85,7 +86,6 @@ impl SnapshotStorage<SnapshotPath> for S3Backend {
 
         let s3_prefix_base = format!("{}/", self.config.prefix);
         let mut total_size: u64 = 0;
-        let gen_map = crate::utils::generate_s3_url_reverse_encode_map();
 
         loop {
             let req = ListObjectsV2Request {
@@ -105,7 +105,7 @@ impl SnapshotStorage<SnapshotPath> for S3Backend {
                 let key = item.key.unwrap();
                 if key.starts_with(&s3_prefix_base) {
                     let key = key[s3_prefix_base.len()..].to_string();
-                    let key = crate::utils::rewrite_url_string(&gen_map, &key);
+                    // let key = crate::utils::rewrite_url_string(&gen_map, &key);
                     if first_key {
                         first_key = false;
                         progress.set_message(&key);
@@ -155,11 +155,7 @@ impl TargetStorage<SnapshotPath, ByteStream> for S3Backend {
             .map_ok(|bytes| bytes.freeze());
         let req = PutObjectRequest {
             bucket: self.config.bucket.clone(),
-            key: format!(
-                "{}/{}",
-                self.config.prefix,
-                crate::utils::rewrite_url_string(&self.mapper, &snapshot.0)
-            ),
+            key: format!("{}/{}", self.config.prefix, snapshot.0),
             body: Some(rusoto_s3::StreamingBody::new(body)),
             metadata: Some(self.gen_metadata()),
             content_length: Some(content_length as i64),
