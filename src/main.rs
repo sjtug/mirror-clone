@@ -12,7 +12,6 @@ mod mirror_intel;
 mod pypi;
 mod rsync;
 mod rustup;
-mod s3;
 mod simple_diff_transfer;
 mod timeout;
 mod traits;
