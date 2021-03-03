@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::common::{Mission, SnapshotConfig, SnapshotPath};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::stream_pipe::ByteStream;
 use crate::traits::{SnapshotStorage, TargetStorage};
 

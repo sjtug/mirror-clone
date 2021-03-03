@@ -1,6 +1,6 @@
 use crate::homebrew::Homebrew as HomebrewConfig;
 use crate::pypi::Pypi as PypiConfig;
-use crate::s3::S3Config;
+
 use crate::{
     error::{Error, Result},
     mirror_intel::MirrorIntel,

@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
+use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
 use crate::traits::{SnapshotStorage, SourceStorage};
 use futures_util::StreamExt;
-use slog::{debug, info, warn};
+use slog::{debug, warn};
 use std::sync::atomic::AtomicUsize;
-use tokio::fs::{File, OpenOptions};
+use tokio::fs::OpenOptions;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 
 pub type ByteStream = (tokio::fs::File, u64);
