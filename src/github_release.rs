@@ -1,7 +1,7 @@
-use crate::common::{Mission, SnapshotConfig};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::Result;
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
-use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::traits::SnapshotStorage;
 
 use std::time::Duration;
 
@@ -16,12 +16,12 @@ pub struct GitHubRelease {
 }
 
 #[async_trait]
-impl SnapshotStorage<String> for GitHubRelease {
+impl SnapshotStorage<SnapshotPath> for GitHubRelease {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<SnapshotPath>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -66,17 +66,10 @@ impl SnapshotStorage<String> for GitHubRelease {
 
         progress.finish_with_message("done");
 
-        Ok(snapshot)
+        Ok(crate::utils::snapshot_string_to_path(snapshot))
     }
 
     fn info(&self) -> String {
         format!("github releases, {:?}", self)
-    }
-}
-
-#[async_trait]
-impl SourceStorage<String, String> for GitHubRelease {
-    async fn get_object(&self, snapshot: String, _mission: &Mission) -> Result<String> {
-        Ok(snapshot)
     }
 }

@@ -1,13 +1,11 @@
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::ClientBuilder;
 
+use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::{Error, Result};
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
+use crate::traits::{SnapshotStorage, SourceStorage, TargetStorage};
 use crate::utils::{create_logger, spinner};
-use crate::{
-    common::{Mission, SnapshotConfig},
-    traits::{SnapshotStorage, SourceStorage, TargetStorage},
-};
 
 use futures_util::StreamExt;
 use rand::prelude::*;
@@ -22,35 +20,37 @@ pub struct SimpleDiffTransferConfig {
     pub snapshot_config: SnapshotConfig,
 }
 
-pub struct SimpleDiffTransfer<Source, Target>
+pub struct SimpleDiffTransfer<Source, Target, Item>
 where
-    Source: SourceStorage<String, String> + SnapshotStorage<String>,
-    Target: TargetStorage<String> + SnapshotStorage<String>,
+    Source: SourceStorage<SnapshotPath, Item> + SnapshotStorage<SnapshotPath>,
+    Target: TargetStorage<SnapshotPath, Item> + SnapshotStorage<SnapshotPath>,
 {
     source: Source,
     target: Target,
     config: SimpleDiffTransferConfig,
+    _phantom: std::marker::PhantomData<Item>,
 }
 
-impl<Source, Target> SimpleDiffTransfer<Source, Target>
+impl<Source, Target, Item> SimpleDiffTransfer<Source, Target, Item>
 where
-    Source: SourceStorage<String, String> + SnapshotStorage<String>,
-    Target: TargetStorage<String> + SnapshotStorage<String>,
+    Source: SourceStorage<SnapshotPath, Item> + SnapshotStorage<SnapshotPath>,
+    Target: TargetStorage<SnapshotPath, Item> + SnapshotStorage<SnapshotPath>,
 {
     pub fn new(source: Source, target: Target, config: SimpleDiffTransferConfig) -> Self {
         Self {
             source,
             target,
             config,
+            _phantom: std::marker::PhantomData,
         }
     }
 
-    fn debug_snapshot(logger: slog::Logger, snapshot: &[String]) {
+    fn debug_snapshot(logger: slog::Logger, snapshot: &[SnapshotPath]) {
         let selected: Vec<_> = snapshot
             .choose_multiple(&mut rand::thread_rng(), 50)
             .collect();
         for item in selected {
-            debug!(logger, "{}", item);
+            debug!(logger, "{}", item.0);
         }
     }
 
@@ -136,13 +136,32 @@ where
             logger: logger.new(o!("task" => "mirror.target")),
         });
 
-        // TODO: do diff between two endpoints
+        info!(logger, "generating transfer plan...");
+
+        let source_sort = tokio::task::spawn_blocking(move || {
+            let mut source_snapshot: Vec<SnapshotPath> = source_snapshot;
+            source_snapshot.sort();
+            source_snapshot
+        });
+
+        let target_sort = tokio::task::spawn_blocking(move || {
+            let mut target_snapshot: Vec<SnapshotPath> = target_snapshot;
+            target_snapshot.sort();
+            target_snapshot
+        });
+
+        let (source_snapshot, target_snapshot) = tokio::join!(source_sort, target_sort);
+
+        let source_snapshot = source_snapshot
+            .map_err(|err| Error::ProcessError(format!("error while sorting: {:?}", err)))?;
+        let target_snapshot = target_snapshot
+            .map_err(|err| Error::ProcessError(format!("error while sorting: {:?}", err)))?;
 
         let source = Arc::new(self.source);
         let target = Arc::new(self.target);
 
-        let map_snapshot = |source_snapshot: String| {
-            progress.set_message(&source_snapshot);
+        let map_snapshot = |source_snapshot: SnapshotPath| {
+            progress.set_message(&source_snapshot.0);
             let source = source.clone();
             let target = target.clone();
             let source_mission = source_mission.clone();
@@ -151,12 +170,12 @@ where
 
             let func = async move {
                 let source_object = source
-                    .get_object(source_snapshot, &source_mission)
+                    .get_object(&source_snapshot, &source_mission)
                     .timeout(Duration::from_secs(60))
                     .await
                     .into_result()?;
                 if let Err(err) = target
-                    .put_object(source_object, &target_mission)
+                    .put_object(&source_snapshot, source_object, &target_mission)
                     .timeout(Duration::from_secs(60))
                     .await
                     .into_result()

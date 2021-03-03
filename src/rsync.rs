@@ -1,7 +1,7 @@
 use crate::error::Result;
-use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::traits::SnapshotStorage;
 
-use crate::common::{Mission, SnapshotConfig};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::Error;
 
 use async_trait::async_trait;
@@ -30,12 +30,12 @@ fn parse_rsync_output(line: &str) -> Result<(&str, &str, &str, &str, &str)> {
 }
 
 #[async_trait]
-impl SnapshotStorage<String> for Rsync {
+impl SnapshotStorage<SnapshotPath> for Rsync {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<SnapshotPath>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let _client = mission.client;
@@ -94,17 +94,10 @@ impl SnapshotStorage<String> for Rsync {
 
         progress.finish_with_message("done");
 
-        Ok(snapshot)
+        Ok(crate::utils::snapshot_string_to_path(snapshot))
     }
 
     fn info(&self) -> String {
         format!("rsync, {:?}", self)
-    }
-}
-
-#[async_trait]
-impl SourceStorage<String, String> for Rsync {
-    async fn get_object(&self, snapshot: String, _mission: &Mission) -> Result<String> {
-        Ok(snapshot)
     }
 }

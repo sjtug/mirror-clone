@@ -1,5 +1,5 @@
-use crate::common::{Mission, SnapshotConfig};
-use crate::error::Result;
+use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferPath};
+use crate::error::{Error, Result};
 use crate::traits::{SnapshotStorage, TargetStorage};
 use async_trait::async_trait;
 use reqwest::{redirect::Policy, Client, ClientBuilder};
@@ -29,12 +29,12 @@ impl MirrorIntel {
 }
 
 #[async_trait]
-impl SnapshotStorage<String> for MirrorIntel {
+impl SnapshotStorage<SnapshotPath> for MirrorIntel {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<SnapshotPath>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -54,8 +54,15 @@ impl SnapshotStorage<String> for MirrorIntel {
 }
 
 #[async_trait]
-impl TargetStorage<String> for MirrorIntel {
-    async fn put_object(&self, item: String, mission: &Mission) -> Result<()> {
+impl TargetStorage<SnapshotPath, TransferPath> for MirrorIntel {
+    async fn put_object(
+        &self,
+        snapshot: &SnapshotPath,
+        item: TransferPath,
+        mission: &Mission,
+    ) -> Result<()> {
+        let _snapshot = &snapshot.0;
+        let item = item.0;
         let target_url = format!("{}/{}", self.config.base, item);
         let response = self.client.head(&target_url).send().await?;
         let headers = response.headers().clone();
@@ -75,5 +82,11 @@ impl TargetStorage<String> for MirrorIntel {
             }
         }
         Ok(())
+    }
+
+    async fn delete_object(&self, _snapshot: &SnapshotPath, _mission: &Mission) -> Result<()> {
+        Err(Error::StorageError(
+            "delete is not supported for mirror-intel backend".to_string(),
+        ))
     }
 }

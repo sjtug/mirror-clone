@@ -1,3 +1,4 @@
+use crate::common::SnapshotPath;
 use indicatif::ProgressStyle;
 use slog::{o, Drain};
 
@@ -22,4 +23,8 @@ pub fn bar() -> ProgressStyle {
             "{prefix:.bold.dim} [{elapsed_precise}] [{bar:40}] [{eta_precise}] ({pos}/{len}) {msg}",
         )
         .progress_chars("=> ")
+}
+
+pub fn snapshot_string_to_path(snapshot: Vec<String>) -> Vec<SnapshotPath> {
+    snapshot.into_iter().map(|x| SnapshotPath(x)).collect()
 }

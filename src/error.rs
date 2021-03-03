@@ -16,6 +16,8 @@ pub enum Error {
     ZipError(#[from] zip::result::ZipError),
     #[error("Timeout Error")]
     TimeoutError(()),
+    #[error("Storage Error {0}")]
+    StorageError(String),
 }
 
 pub type Result<T> = result::Result<T, Error>;

@@ -1,6 +1,6 @@
-use crate::common::{Mission, SnapshotConfig};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::{Error, Result};
-use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::traits::SnapshotStorage;
 
 use async_trait::async_trait;
 use futures_util::{StreamExt, TryStreamExt};
@@ -14,8 +14,12 @@ pub struct Dart {
 }
 
 #[async_trait]
-impl SnapshotStorage<String> for Dart {
-    async fn snapshot(&mut self, mission: Mission, config: &SnapshotConfig) -> Result<Vec<String>> {
+impl SnapshotStorage<SnapshotPath> for Dart {
+    async fn snapshot(
+        &mut self,
+        mission: Mission,
+        config: &SnapshotConfig,
+    ) -> Result<Vec<SnapshotPath>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -104,21 +108,14 @@ impl SnapshotStorage<String> for Dart {
             .try_collect()
             .await;
 
-        let snapshots: Vec<_> = snapshots?.into_iter().flatten().collect();
+        let snapshot: Vec<_> = snapshots?.into_iter().flatten().collect();
 
         progress.finish_with_message("done");
 
-        Ok(snapshots)
+        Ok(crate::utils::snapshot_string_to_path(snapshot))
     }
 
     fn info(&self) -> String {
         format!("dart, {:?}", self)
-    }
-}
-
-#[async_trait]
-impl SourceStorage<String, String> for Dart {
-    async fn get_object(&self, snapshot: String, _mission: &Mission) -> Result<String> {
-        Ok(snapshot)
     }
 }
