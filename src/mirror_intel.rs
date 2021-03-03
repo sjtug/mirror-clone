@@ -20,7 +20,7 @@ impl MirrorIntel {
         Self {
             config: MirrorIntelConfig { base },
             client: ClientBuilder::new()
-                .user_agent("mirror-clone / 0.1 (siyuan.internal.sjtug.org)")
+                .user_agent(crate::utils::user_agent())
                 .redirect(Policy::none())
                 .build()
                 .unwrap(),

@@ -28,3 +28,10 @@ pub fn bar() -> ProgressStyle {
 pub fn snapshot_string_to_path(snapshot: Vec<String>) -> Vec<SnapshotPath> {
     snapshot.into_iter().map(|x| SnapshotPath(x)).collect()
 }
+
+pub fn user_agent() -> String {
+    format!(
+        "mirror-clone / 0.1 ({})",
+        std::env::var("MIRROR_CLONE_SITE").unwrap_or("mirror.sjtu.edu.cn".to_string())
+    )
+}

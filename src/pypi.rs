@@ -1,17 +1,27 @@
-use crate::common::{Mission, SnapshotConfig, SnapshotPath};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
 use crate::error::{Error, Result};
-use crate::traits::SnapshotStorage;
+use crate::traits::{SnapshotStorage, SourceStorage};
 use crate::utils::bar;
 
 use async_trait::async_trait;
 use futures_util::{StreamExt, TryStreamExt};
 use regex::Regex;
 use slog::{info, warn};
+use structopt::StructOpt;
 
-#[derive(Debug)]
+#[derive(Debug, StructOpt)]
 pub struct Pypi {
+    #[structopt(
+        long,
+        default_value = "https://nanomirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+    )]
     pub simple_base: String,
+    #[structopt(
+        long,
+        default_value = "https://nanomirrors.tuna.tsinghua.edu.cn/pypi/web/packages"
+    )]
     pub package_base: String,
+    #[structopt(long)]
     pub debug: bool,
 }
 
@@ -97,5 +107,12 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
 
     fn info(&self) -> String {
         format!("pypi, {:?}", self)
+    }
+}
+
+#[async_trait]
+impl SourceStorage<SnapshotPath, TransferURL> for Pypi {
+    async fn get_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<TransferURL> {
+        Ok(TransferURL(format!("{}/{}", self.package_base, snapshot.0)))
     }
 }
