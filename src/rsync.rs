@@ -1,7 +1,7 @@
 use crate::error::Result;
-use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::traits::SnapshotStorage;
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferPath};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::Error;
 
 use async_trait::async_trait;

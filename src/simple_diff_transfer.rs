@@ -1,7 +1,7 @@
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::ClientBuilder;
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferPath};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::{Error, Result};
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
 use crate::traits::{SnapshotStorage, SourceStorage, TargetStorage};
@@ -154,7 +154,7 @@ where
 
         let source_snapshot = source_snapshot
             .map_err(|err| Error::ProcessError(format!("error while sorting: {:?}", err)))?;
-        let target_snapshot = target_snapshot
+        let _target_snapshot = target_snapshot
             .map_err(|err| Error::ProcessError(format!("error while sorting: {:?}", err)))?;
 
         let source = Arc::new(self.source);

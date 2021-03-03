@@ -1,6 +1,6 @@
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferPath};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::{Error, Result};
-use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::traits::SnapshotStorage;
 
 use async_trait::async_trait;
 use futures_util::{StreamExt, TryStreamExt};

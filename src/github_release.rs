@@ -1,7 +1,7 @@
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferPath};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::Result;
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
-use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::traits::SnapshotStorage;
 
 use std::time::Duration;
 

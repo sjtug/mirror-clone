@@ -3,8 +3,7 @@ use crate::error::{Error, Result};
 use crate::traits::{SnapshotStorage, TargetStorage};
 use async_trait::async_trait;
 use reqwest::{redirect::Policy, Client, ClientBuilder};
-use slog::{info, warn};
-use std::pin::Pin;
+use slog::info;
 
 #[derive(Debug)]
 pub struct MirrorIntelConfig {
@@ -60,9 +59,9 @@ type ByteStream = std::fs::File;
 impl TargetStorage<String, ByteStream> for MirrorIntel {
     async fn put_object(
         &self,
-        snapshot: &String,
-        item: ByteStream,
-        mission: &Mission,
+        _snapshot: &String,
+        _item: ByteStream,
+        _mission: &Mission,
     ) -> Result<()> {
         Ok(())
     }

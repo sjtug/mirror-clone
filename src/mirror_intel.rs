@@ -61,7 +61,7 @@ impl TargetStorage<SnapshotPath, TransferPath> for MirrorIntel {
         item: TransferPath,
         mission: &Mission,
     ) -> Result<()> {
-        let snapshot = &snapshot.0;
+        let _snapshot = &snapshot.0;
         let item = item.0;
         let target_url = format!("{}/{}", self.config.base, item);
         let response = self.client.head(&target_url).send().await?;
