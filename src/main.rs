@@ -1,5 +1,3 @@
-#![feature(str_split_once)]
-
 mod common;
 mod crates_io;
 mod dart;
