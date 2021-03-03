@@ -30,6 +30,7 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
+        let gen_map = crate::utils::generate_s3_url_reverse_encode_map();
 
         info!(logger, "fetching API json...");
         progress.set_message("fetching API json...");
@@ -81,6 +82,7 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
                     None
                 }
             })
+            .map(|url| crate::utils::rewrite_url_string(&gen_map, &url))
             .collect();
 
         progress.finish_with_message("done");

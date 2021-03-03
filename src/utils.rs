@@ -36,3 +36,49 @@ pub fn user_agent() -> String {
         std::env::var("MIRROR_CLONE_SITE").expect("No MIRROR_CLONE_SITE env variable")
     )
 }
+
+pub fn generate_s3_url_encode_map() -> Vec<(&'static str, &'static str)> {
+    // reference: https://github.com/GeorgePhillips/node-s3-url-encode/blob/master/index.js
+    let mut map = vec![];
+    map.push(("+", "%2B"));
+    map.push(("!", "%21"));
+    map.push(("\"", "%22"));
+    map.push(("#", "%23"));
+    map.push(("$", "%24"));
+    map.push(("&", "%26"));
+    map.push(("'", "%27"));
+    map.push(("(", "%28"));
+    map.push((")", "%29"));
+    map.push(("*", "%2A"));
+    map.push((",", "%2C"));
+    map.push((":", "%3A"));
+    map.push((";", "%3B"));
+    map.push(("=", "%3D"));
+    map.push(("?", "%3F"));
+    map.push(("@", "%40"));
+    map
+}
+
+pub fn generate_s3_url_reverse_encode_map() -> Vec<(&'static str, &'static str)> {
+    generate_s3_url_encode_map()
+        .into_iter()
+        .map(|(x, y)| (y, x))
+        .collect()
+}
+
+pub fn rewrite_url_string(url_encode_map: &[(&'static str, &'static str)], key: &str) -> String {
+    let mut key = key.to_string();
+
+    for (ch, seq) in url_encode_map {
+        key = key.replace(ch, seq);
+    }
+
+    key
+}
+
+pub fn rewrite_snapshot(target_snapshot: &mut [SnapshotPath]) {
+    let gen_map = generate_s3_url_encode_map();
+    for path in target_snapshot {
+        path.0 = rewrite_url_string(&gen_map, &path.0);
+    }
+}
