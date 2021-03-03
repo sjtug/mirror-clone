@@ -154,7 +154,7 @@ where
 
         let source_snapshot = source_snapshot
             .map_err(|err| Error::ProcessError(format!("error while sorting: {:?}", err)))?;
-        let _target_snapshot = target_snapshot
+        let target_snapshot = target_snapshot
             .map_err(|err| Error::ProcessError(format!("error while sorting: {:?}", err)))?;
 
         let source = Arc::new(self.source);
