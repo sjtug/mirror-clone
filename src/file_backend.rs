@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+
 
 use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::{Error, Result};
@@ -67,7 +67,7 @@ impl TargetStorage<SnapshotPath, ByteStream> for FileBackend {
         &self,
         snapshot: &SnapshotPath,
         byte_stream: ByteStream,
-        mission: &Mission,
+        _mission: &Mission,
     ) -> Result<()> {
         let path = byte_stream.object.use_file();
         let target: std::path::PathBuf = format!("{}/{}", self.base_path, snapshot.0).into();
