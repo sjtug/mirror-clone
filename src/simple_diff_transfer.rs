@@ -96,20 +96,24 @@ where
         };
 
         let config_progress = self.config.progress;
-        let (source_snapshot, target_snapshot, _) = tokio::join!(
-            self.source
-                .snapshot(source_mission, &self.config.snapshot_config),
-            self.target
-                .snapshot(target_mission, &self.config.snapshot_config),
-            tokio::task::spawn_blocking(move || {
-                if config_progress {
-                    all_progress.join().unwrap()
-                }
-            })
-        );
 
-        let source_snapshot = source_snapshot?;
-        let target_snapshot = target_snapshot?;
+        let handle = tokio::task::spawn_blocking(move || {
+            if config_progress {
+                all_progress.join().unwrap()
+            }
+        });
+
+        let source_snapshot = self
+            .source
+            .snapshot(source_mission, &self.config.snapshot_config)
+            .await?;
+
+        let target_snapshot = self
+            .target
+            .snapshot(target_mission, &self.config.snapshot_config)
+            .await?;
+
+        handle.await.ok();
 
         Self::debug_snapshot(logger.clone(), &source_snapshot);
         Self::debug_snapshot(logger.clone(), &target_snapshot);
