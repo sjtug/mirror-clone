@@ -51,6 +51,7 @@ impl Into<S3Backend> for S3CliConfig {
         if let Some(bucket) = self.s3_bucket {
             config.bucket = bucket;
         }
+        config.prefix_hint_mode = self.s3_prefix_hint_mode;
         S3Backend::new(config)
     }
 }
@@ -71,6 +72,8 @@ pub struct S3CliConfig {
     pub s3_prefix: Option<String>,
     #[structopt(long, help = "Buffer data to this temporary directory")]
     pub s3_buffer_path: Option<String>,
+    #[structopt(long, help = "Prefix hint mode, to accelerate scanning")]
+    pub s3_prefix_hint_mode: Option<String>,
 }
 
 #[derive(StructOpt, Debug)]

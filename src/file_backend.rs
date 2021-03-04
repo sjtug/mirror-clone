@@ -4,7 +4,7 @@ use crate::stream_pipe::ByteStream;
 use crate::traits::{SnapshotStorage, TargetStorage};
 
 use async_trait::async_trait;
-use slog::{debug, info, warn};
+use slog::info;
 use structopt::StructOpt;
 use walkdir::WalkDir;
 
