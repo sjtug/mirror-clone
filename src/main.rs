@@ -2,6 +2,7 @@ mod common;
 mod crates_io;
 mod dart;
 mod error;
+mod file_backend;
 mod github_release;
 mod gradle;
 mod homebrew;
@@ -19,6 +20,7 @@ mod traits;
 mod utils;
 
 use common::SnapshotConfig;
+use file_backend::FileBackend;
 use mirror_intel::MirrorIntel;
 use opts::{Source, Target};
 use s3::S3Backend;
@@ -39,6 +41,15 @@ macro_rules! transfer {
                     buffer_path: $opts.s3_config.s3_buffer_path.clone().unwrap(),
                 };
                 let target: S3Backend = $opts.s3_config.into();
+                let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
+                transfer.transfer().await.unwrap();
+            }
+            Target::File => {
+                let source = stream_pipe::ByteStreamPipe {
+                    source: $source,
+                    buffer_path: $opts.file_config.file_buffer_path.clone().unwrap(),
+                };
+                let target: FileBackend = $opts.file_config.into();
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
                 transfer.transfer().await.unwrap();
             }

@@ -29,7 +29,7 @@ sha2 = "0.9"
 itertools = "0.9"
 serde_json = "1.0"
 structopt = "0.3"
-walkdir = "2.3"
+walkdir = "2"
 serde = { version = "1.0", features = ["derive"] }
 async-trait = "0.1"
 console = "0.13"

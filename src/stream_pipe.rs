@@ -14,7 +14,7 @@ use tokio_util::codec;
 pub enum ByteObject {
     LocalFile {
         file: Option<tokio::fs::File>,
-        path: std::path::PathBuf,
+        path: Option<std::path::PathBuf>,
     },
 }
 
@@ -28,16 +28,27 @@ impl ByteObject {
             .map_ok(|bytes| bytes.freeze()),
         }
     }
+
+    pub fn use_file(mut self) -> std::path::PathBuf {
+        match &mut self {
+            ByteObject::LocalFile { file, path } => {
+                drop(file.take().unwrap());
+                path.take().unwrap()
+            }
+        }
+    }
 }
 
 impl Drop for ByteObject {
     fn drop(&mut self) {
         match self {
             ByteObject::LocalFile { path, .. } => {
-                // TODO: find a safer way to handle this. Currently, we remove the file
-                // before dropping the file object.
-                if let Err(err) = std::fs::remove_file(&path) {
-                    eprintln!("failed to remove cache file: {:?} {:?}", err, path);
+                if let Some(path) = path {
+                    // TODO: find a safer way to handle this. Currently, we remove the file
+                    // before dropping the file object.
+                    if let Err(err) = std::fs::remove_file(&path) {
+                        eprintln!("failed to remove cache file: {:?} {:?}", err, path);
+                    }
                 }
             }
         }
@@ -152,7 +163,7 @@ where
         Ok(ByteStream {
             object: ByteObject::LocalFile {
                 file: Some(f),
-                path: path.into(),
+                path: Some(path.into()),
             },
             length: total_bytes,
         })

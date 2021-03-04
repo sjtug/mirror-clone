@@ -1,6 +1,6 @@
-use crate::crates_io::CratesIo as CratesIoConfig;
 use crate::homebrew::Homebrew as HomebrewConfig;
 use crate::pypi::Pypi as PypiConfig;
+use crate::{crates_io::CratesIo as CratesIoConfig, file_backend::FileBackend};
 
 use crate::{
     error::{Error, Result},
@@ -23,6 +23,7 @@ pub enum Source {
 pub enum Target {
     Intel,
     S3,
+    File,
 }
 
 #[derive(StructOpt, Debug)]
@@ -54,6 +55,12 @@ impl Into<S3Backend> for S3CliConfig {
     }
 }
 
+impl Into<FileBackend> for FileBackendConfig {
+    fn into(self) -> FileBackend {
+        FileBackend::new(self.file_base_path.unwrap())
+    }
+}
+
 #[derive(StructOpt, Debug)]
 pub struct S3CliConfig {
     #[structopt(long, help = "Endpoint for S3 backend")]
@@ -66,6 +73,22 @@ pub struct S3CliConfig {
     pub s3_buffer_path: Option<String>,
 }
 
+#[derive(StructOpt, Debug)]
+pub struct FileBackendConfig {
+    #[structopt(
+        long,
+        help = "Base path for file backend",
+        required_if("target_type", "file")
+    )]
+    pub file_base_path: Option<String>,
+    #[structopt(
+        long,
+        help = "Buffer path for file backend, should not be within base path",
+        required_if("target_type", "file")
+    )]
+    pub file_buffer_path: Option<String>,
+}
+
 impl std::str::FromStr for Target {
     type Err = Error;
 
@@ -73,6 +96,7 @@ impl std::str::FromStr for Target {
         match s {
             "intel" => Ok(Self::Intel),
             "s3" => Ok(Self::S3),
+            "file" => Ok(Self::File),
             _ => Err(Error::ConfigureError("unsupported target".to_string())),
         }
     }
@@ -89,6 +113,8 @@ pub struct Opts {
     pub mirror_intel_config: MirrorIntelCliConfig,
     #[structopt(flatten)]
     pub s3_config: S3CliConfig,
+    #[structopt(flatten)]
+    pub file_config: FileBackendConfig,
     #[structopt(long, help = "Enable progress bar")]
     pub progress: bool,
     #[structopt(long, help = "Worker threads")]

@@ -18,7 +18,10 @@ By assembling them, we can get a task that transfers one repo to another.
 ```
 RUST_LOG=info ./mirror-clone --progress --target-type s3 --s3-prefix homebrew-bottles --s3-buffer-path /srv/disk1/mirror-clone-cache homebrew
 RUST_LOG=info ./mirror-clone --progress --target-type s3 --s3-prefix crates.io/crates --s3-buffer-path /srv/disk1/mirror-clone-cache crates-io
+RUST_LOG=info ./mirror-clone --progress --target-type file --file-base-path ~/mirror-clone/crates.io --file-buffer-path ~/Work/intel_temp crates-io
 ```
+
+When running on server, we recommend using `RUST_LOG=info` flag and remove `--progress` flag.
 
 ## Implementation
 
