@@ -6,10 +6,10 @@ use crate::stream_pipe::ByteStream;
 use crate::traits::{SnapshotStorage, TargetStorage};
 
 use async_trait::async_trait;
+use futures_util::{stream, StreamExt};
 use rusoto_core::Region;
 use rusoto_s3::{DeleteObjectRequest, ListObjectsV2Request, PutObjectRequest, S3Client, S3};
 use slog::{debug, info, warn};
-use futures_util::{StreamExt, stream};
 
 #[derive(Debug)]
 pub struct S3Config {
@@ -94,59 +94,62 @@ impl SnapshotStorage<SnapshotPath> for S3Backend {
             }
         };
 
-        let mut futures = stream::iter(prefix).map(|additional_prefix| {
-            let bucket = self.config.bucket.clone();
-            let prefix = Some(format!("{}{}", self.config.prefix, additional_prefix));
-            let client = self.client.clone();
-            let total_size = total_size.clone();
-            let progress = progress.clone();
-            let logger = logger.clone();
-            let s3_prefix_base = s3_prefix_base.clone();
+        let mut futures = stream::iter(prefix)
+            .map(|additional_prefix| {
+                let bucket = self.config.bucket.clone();
+                let prefix = Some(format!("{}{}", self.config.prefix, additional_prefix));
+                let client = self.client.clone();
+                let total_size = total_size.clone();
+                let progress = progress.clone();
+                let logger = logger.clone();
+                let s3_prefix_base = s3_prefix_base.clone();
 
-            let scan_future = async move {
-                let mut snapshot = vec![];
-                let mut continuation_token = None;
+                let scan_future = async move {
+                    let mut snapshot = vec![];
+                    let mut continuation_token = None;
 
-                loop {
-                    let req = ListObjectsV2Request {
-                        bucket: bucket.clone(),
-                        prefix: prefix.clone(),
-                        continuation_token,
-                        ..Default::default()
-                    };
+                    loop {
+                        let req = ListObjectsV2Request {
+                            bucket: bucket.clone(),
+                            prefix: prefix.clone(),
+                            continuation_token,
+                            ..Default::default()
+                        };
 
-                    let resp = client.list_objects_v2(req).await?;
+                        let resp = client.list_objects_v2(req).await?;
 
-                    let mut first_key = true;
-                    for item in resp.contents.unwrap() {
-                        if let Some(size) = item.size {
-                            total_size.fetch_add(size as u64, std::sync::atomic::Ordering::SeqCst);
-                        }
-                        let key = item.key.unwrap();
-                        if key.starts_with(&s3_prefix_base) {
-                            let key = key[s3_prefix_base.len()..].to_string();
-                            // let key = crate::utils::rewrite_url_string(&gen_map, &key);
-                            if first_key {
-                                first_key = false;
-                                progress.set_message(&key);
+                        let mut first_key = true;
+                        for item in resp.contents.unwrap() {
+                            if let Some(size) = item.size {
+                                total_size
+                                    .fetch_add(size as u64, std::sync::atomic::Ordering::SeqCst);
                             }
-                            snapshot.push(SnapshotPath(key));
+                            let key = item.key.unwrap();
+                            if key.starts_with(&s3_prefix_base) {
+                                let key = key[s3_prefix_base.len()..].to_string();
+                                // let key = crate::utils::rewrite_url_string(&gen_map, &key);
+                                if first_key {
+                                    first_key = false;
+                                    progress.set_message(&key);
+                                }
+                                snapshot.push(SnapshotPath(key));
+                            } else {
+                                warn!(logger, "prefix not match {}", key);
+                            }
+                        }
+
+                        if let Some(next_continuation_token) = resp.next_continuation_token {
+                            continuation_token = Some(next_continuation_token);
                         } else {
-                            warn!(logger, "prefix not match {}", key);
+                            break;
                         }
                     }
+                    Ok::<_, Error>(snapshot)
+                };
 
-                    if let Some(next_continuation_token) = resp.next_continuation_token {
-                        continuation_token = Some(next_continuation_token);
-                    } else {
-                        break;
-                    }
-                }
-                Ok::<_, Error>(snapshot)
-            };
-
-            scan_future
-        }).buffer_unordered(256);
+                scan_future
+            })
+            .buffer_unordered(256);
 
         let mut snapshots = vec![];
 
