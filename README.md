@@ -23,6 +23,8 @@ RUST_LOG=info ./mirror-clone --progress --target-type file --file-base-path ~/mi
 
 When running on server, we recommend using `RUST_LOG=info` flag and remove `--progress` flag.
 
+For more usage, refer to our [infra wiki](https://github.com/sjtug/mirror-docker-unified/wiki/Bootstrap-mirror-from-SJTUG).
+
 ## Implementation
 
 ### Transfer
