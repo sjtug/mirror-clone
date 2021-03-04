@@ -26,6 +26,10 @@ pub enum Error {
     HTTPError(reqwest::StatusCode),
     #[error("Pipe Error {0}")]
     PipeError(String),
+    #[error("Json Decode Error {0}")]
+    JsonDecodeError(#[from] serde_json::Error),
+    #[error("Datetime Parse Error {0}")]
+    DatetimeParseError(#[from] chrono::ParseError),
 }
 
 impl<T: std::fmt::Debug> From<rusoto_core::RusotoError<T>> for Error {

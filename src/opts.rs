@@ -1,6 +1,9 @@
+use crate::conda::CondaConfig;
+use crate::crates_io::CratesIo as CratesIoConfig;
+use crate::file_backend::FileBackend;
 use crate::homebrew::Homebrew as HomebrewConfig;
 use crate::pypi::Pypi as PypiConfig;
-use crate::{crates_io::CratesIo as CratesIoConfig, file_backend::FileBackend};
+use crate::rsync::Rsync as RsyncConfig;
 
 use crate::{
     error::{Error, Result},
@@ -17,6 +20,10 @@ pub enum Source {
     Homebrew(HomebrewConfig),
     #[structopt(about = "crates.io")]
     CratesIo(CratesIoConfig),
+    #[structopt(about = "conda")]
+    Conda(CondaConfig),
+    #[structopt(about = "rsync")]
+    Rsync(RsyncConfig),
 }
 
 #[derive(Debug)]

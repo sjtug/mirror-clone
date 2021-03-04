@@ -1,20 +1,27 @@
 use crate::error::Result;
-use crate::traits::SnapshotStorage;
+use crate::traits::{SnapshotStorage, SourceStorage};
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath};
+use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::Error;
+use crate::metadata::SnapshotMeta;
 
 use async_trait::async_trait;
+use chrono::TimeZone;
 use slog::info;
+use std::process::Stdio;
+use structopt::StructOpt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-use std::process::Stdio;
-
-#[derive(Debug)]
+#[derive(Debug, StructOpt)]
 pub struct Rsync {
-    pub base: String,
+    #[structopt(long, help = "Base of Rsync")]
+    pub rsync_base: String,
+    #[structopt(long, help = "Base of HTTP")]
+    pub http_base: String,
+    #[structopt(long, help = "Debug mode")]
     pub debug: bool,
+    #[structopt(long, help = "Prefix to ignore", default_value = "")]
     pub ignore_prefix: String,
 }
 
@@ -30,12 +37,12 @@ fn parse_rsync_output(line: &str) -> Result<(&str, &str, &str, &str, &str)> {
 }
 
 #[async_trait]
-impl SnapshotStorage<SnapshotPath> for Rsync {
+impl SnapshotStorage<SnapshotMeta> for Rsync {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<SnapshotPath>> {
+    ) -> Result<Vec<SnapshotMeta>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let _client = mission.client;
@@ -44,7 +51,7 @@ impl SnapshotStorage<SnapshotPath> for Rsync {
 
         let mut cmd = Command::new("rsync");
         cmd.kill_on_drop(true);
-        cmd.arg("-r").arg(self.base.clone());
+        cmd.arg("-r").arg(self.rsync_base.clone()).arg("--no-motd");
         cmd.stdout(Stdio::piped());
 
         let mut child = cmd.spawn().expect("failed to spawn command");
@@ -64,7 +71,9 @@ impl SnapshotStorage<SnapshotPath> for Rsync {
         });
 
         let mut snapshot = vec![];
-        let mut idx = 0;
+        let mut idx: usize = 0;
+
+        let timezone = chrono::Local::now().timezone();
 
         while let Some(line) = reader.next_line().await? {
             progress.inc(1);
@@ -73,14 +82,23 @@ impl SnapshotStorage<SnapshotPath> for Rsync {
                 break;
             }
 
-            if let Ok((permission, _, _, _, file)) = parse_rsync_output(&line) {
+            if let Ok((permission, size, date, time, file)) = parse_rsync_output(&line) {
                 progress.set_message(file);
                 if !self.ignore_prefix.is_empty() && file.starts_with(&self.ignore_prefix) {
                     continue;
                 }
-                if permission.starts_with("-rw") {
-                    // only clone files
-                    snapshot.push(file.to_string());
+                if permission.starts_with("-r") {
+                    let datetime = timezone
+                        .datetime_from_str(&format!("{} {}", date, time), "%Y/%m/%d %H:%M:%S")?;
+                    let size = size.replace(",", "");
+                    let meta = SnapshotMeta {
+                        key: file.to_string(),
+                        size: Some(size.parse().unwrap()),
+                        last_modified: Some(datetime.timestamp() as u64),
+                        checksum_method: None,
+                        checksum: None,
+                    };
+                    snapshot.push(meta);
                 }
             }
         }
@@ -94,10 +112,17 @@ impl SnapshotStorage<SnapshotPath> for Rsync {
 
         progress.finish_with_message("done");
 
-        Ok(crate::utils::snapshot_string_to_path(snapshot))
+        Ok(snapshot)
     }
 
     fn info(&self) -> String {
         format!("rsync, {:?}", self)
+    }
+}
+
+#[async_trait]
+impl SourceStorage<SnapshotMeta, TransferURL> for Rsync {
+    async fn get_object(&self, snapshot: &SnapshotMeta, _mission: &Mission) -> Result<TransferURL> {
+        Ok(TransferURL(format!("{}/{}", self.http_base, snapshot.key)))
     }
 }

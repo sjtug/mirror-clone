@@ -1,7 +1,11 @@
-use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::{Error, Result};
 use crate::stream_pipe::ByteStream;
-use crate::traits::{SnapshotStorage, TargetStorage};
+use crate::traits::{Key, SnapshotStorage, TargetStorage};
+use crate::{
+    common::{Mission, SnapshotConfig, SnapshotPath},
+    metadata::SnapshotMeta,
+    opts::Target,
+};
 
 use async_trait::async_trait;
 use slog::info;
@@ -60,24 +64,39 @@ impl SnapshotStorage<SnapshotPath> for FileBackend {
 }
 
 #[async_trait]
-impl TargetStorage<SnapshotPath, ByteStream> for FileBackend {
+impl<Snapshot: Key> TargetStorage<Snapshot, ByteStream> for FileBackend {
     async fn put_object(
         &self,
-        snapshot: &SnapshotPath,
+        snapshot: &Snapshot,
         byte_stream: ByteStream,
         _mission: &Mission,
     ) -> Result<()> {
         let path = byte_stream.object.use_file();
-        let target: std::path::PathBuf = format!("{}/{}", self.base_path, snapshot.0).into();
+        let target: std::path::PathBuf = format!("{}/{}", self.base_path, snapshot.key()).into();
         let parent = target.parent().unwrap();
         tokio::fs::create_dir_all(parent).await?;
         tokio::fs::rename(path, target).await?;
         Ok(())
     }
 
-    async fn delete_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<()> {
-        let target = format!("{}/{}", self.base_path, snapshot.0);
+    async fn delete_object(&self, snapshot: &Snapshot, _mission: &Mission) -> Result<()> {
+        let target = format!("{}/{}", self.base_path, snapshot.key());
         tokio::fs::remove_file(target).await?;
         Ok(())
+    }
+}
+
+#[async_trait]
+impl SnapshotStorage<SnapshotMeta> for FileBackend {
+    async fn snapshot(
+        &mut self,
+        _mission: Mission,
+        _config: &SnapshotConfig,
+    ) -> Result<Vec<SnapshotMeta>> {
+        panic!("not supported");
+    }
+
+    fn info(&self) -> String {
+        format!("file, {:?}", self)
     }
 }

@@ -2,13 +2,13 @@ use futures_util::{stream, StreamExt};
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::ClientBuilder;
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath};
+use crate::common::{Mission, SnapshotConfig};
 use crate::error::{Error, Result};
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
-use crate::traits::{SnapshotStorage, SourceStorage, TargetStorage};
+use crate::traits::{Diff, Key, SnapshotStorage, SourceStorage, TargetStorage};
 use crate::utils::{create_logger, spinner};
 
-use iter_set::{classify, Inclusion};
+use iter_set::{classify_by, Inclusion};
 use rand::prelude::*;
 use slog::{debug, info, o, warn};
 
@@ -29,21 +29,23 @@ pub struct SimpleDiffTransferConfig {
     pub print_plan: usize,
 }
 
-pub struct SimpleDiffTransfer<Source, Target, Item>
+pub struct SimpleDiffTransfer<Snapshot, Source, Target, Item>
 where
-    Source: SourceStorage<SnapshotPath, Item> + SnapshotStorage<SnapshotPath>,
-    Target: TargetStorage<SnapshotPath, Item> + SnapshotStorage<SnapshotPath>,
+    Snapshot: Diff + Key,
+    Source: SourceStorage<Snapshot, Item> + SnapshotStorage<Snapshot>,
+    Target: TargetStorage<Snapshot, Item> + SnapshotStorage<Snapshot>,
 {
     source: Source,
     target: Target,
     config: SimpleDiffTransferConfig,
-    _phantom: std::marker::PhantomData<Item>,
+    _phantom: std::marker::PhantomData<(Item, Snapshot)>,
 }
 
-impl<Source, Target, Item> SimpleDiffTransfer<Source, Target, Item>
+impl<Snapshot, Source, Target, Item> SimpleDiffTransfer<Snapshot, Source, Target, Item>
 where
-    Source: SourceStorage<SnapshotPath, Item> + SnapshotStorage<SnapshotPath>,
-    Target: TargetStorage<SnapshotPath, Item> + SnapshotStorage<SnapshotPath>,
+    Snapshot: Diff + Key,
+    Source: SourceStorage<Snapshot, Item> + SnapshotStorage<Snapshot>,
+    Target: TargetStorage<Snapshot, Item> + SnapshotStorage<Snapshot>,
 {
     pub fn new(source: Source, target: Target, config: SimpleDiffTransferConfig) -> Self {
         Self {
@@ -54,13 +56,13 @@ where
         }
     }
 
-    fn debug_snapshot(logger: slog::Logger, snapshot: &[SnapshotPath]) {
+    fn debug_snapshot(logger: slog::Logger, snapshot: &[Snapshot]) {
         let mut selected: Vec<_> = snapshot
             .choose_multiple(&mut rand::thread_rng(), 50)
             .collect();
-        selected.sort();
+        selected.sort_by(|a, b| a.key().cmp(b.key()));
         for item in selected {
-            debug!(logger, "{}", item.0);
+            debug!(logger, "{}", item.key());
         }
     }
 
@@ -145,18 +147,18 @@ where
         let source_count = source_snapshot.len();
 
         let source_sort = tokio::task::spawn_blocking(move || {
-            let mut source_snapshot: Vec<SnapshotPath> = source_snapshot;
-            source_snapshot.sort();
-            source_snapshot.dedup();
+            let mut source_snapshot: Vec<Snapshot> = source_snapshot;
+            source_snapshot.sort_by(|a, b| a.key().cmp(b.key()));
+            source_snapshot.dedup_by(|a, b| a.key().eq(b.key()));
             source_snapshot
         });
 
         let target_count = target_snapshot.len();
 
         let target_sort = tokio::task::spawn_blocking(move || {
-            let mut target_snapshot: Vec<SnapshotPath> = target_snapshot;
-            target_snapshot.sort();
-            target_snapshot.dedup();
+            let mut target_snapshot: Vec<Snapshot> = target_snapshot;
+            target_snapshot.sort_by(|a, b| a.key().cmp(b.key()));
+            target_snapshot.dedup_by(|a, b| a.key().eq(b.key()));
             target_snapshot
         });
 
@@ -194,19 +196,29 @@ where
         let mut deletions = vec![];
 
         let mut max_info = 0;
-        for result in classify(source_snapshot, target_snapshot) {
+        for result in classify_by(source_snapshot, target_snapshot, |a, b| {
+            a.key().cmp(b.key())
+        }) {
             match result {
                 Inclusion::Left(source) => {
                     if max_info < self.config.print_plan {
-                        info!(logger, "+ {:?}", source.0);
+                        info!(logger, "+ {:?}", source.key());
                         max_info += 1;
                     }
                     updates.push(source);
                 }
-                Inclusion::Both(_, _) => {}
+                Inclusion::Both(l, r) => {
+                    if l.diff(&r) {
+                        if max_info < self.config.print_plan {
+                            info!(logger, "= {:?}", l.key());
+                            max_info += 1;
+                        }
+                        updates.push(l);
+                    }
+                }
                 Inclusion::Right(target) => {
                     if max_info < self.config.print_plan {
-                        info!(logger, "- {:?}", target.0);
+                        info!(logger, "- {:?}", target.key());
                         max_info += 1;
                     }
                     deletions.push(target);
@@ -229,8 +241,8 @@ where
         progress.set_length(updates.len() as u64);
         progress.set_position(0);
 
-        let map_snapshot = |snapshot: SnapshotPath, plan: PlanType| {
-            progress.set_message(&snapshot.0);
+        let map_snapshot = |snapshot: Snapshot, plan: PlanType| {
+            progress.set_message(&snapshot.key());
             let source = source.clone();
             let target = target.clone();
             let source_mission = source_mission.clone();
@@ -247,14 +259,18 @@ where
                             {
                                 warn!(
                                     target_mission.logger,
-                                    "error while put {}: {:?}", snapshot.0, err
+                                    "error while put {}: {:?}",
+                                    snapshot.key(),
+                                    err
                                 );
                             }
                         }
                         Err(err) => {
                             warn!(
                                 target_mission.logger,
-                                "error while get {}: {:?}", snapshot.0, err
+                                "error while get {}: {:?}",
+                                snapshot.key(),
+                                err
                             );
                         }
                     },
@@ -267,7 +283,9 @@ where
                         {
                             warn!(
                                 target_mission.logger,
-                                "error while delete {}: {:?}", snapshot.0, err
+                                "error while delete {}: {:?}",
+                                snapshot.key(),
+                                err
                             );
                         }
                     }
