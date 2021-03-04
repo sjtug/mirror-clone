@@ -6,13 +6,10 @@ use crate::stream_pipe::ByteStream;
 use crate::traits::{SnapshotStorage, TargetStorage};
 
 use async_trait::async_trait;
-use futures_util::TryStreamExt;
 use rusoto_core::Region;
 use rusoto_s3::{DeleteObjectRequest, ListObjectsV2Request, PutObjectRequest, S3Client, S3};
 use slog::{debug, info, warn};
 use structopt::StructOpt;
-use tokio::io::BufReader;
-use tokio_util::codec;
 
 #[derive(StructOpt, Debug)]
 pub struct S3Config {
@@ -145,23 +142,26 @@ impl TargetStorage<SnapshotPath, ByteStream> for S3Backend {
     async fn put_object(
         &self,
         snapshot: &SnapshotPath,
-        (file, content_length): ByteStream,
+        byte_stream: ByteStream,
         mission: &Mission,
     ) -> Result<()> {
         let logger = &mission.logger;
         debug!(logger, "upload: {}", snapshot.0);
 
-        let body = codec::FramedRead::new(BufReader::new(file), codec::BytesCodec::new())
-            .map_ok(|bytes| bytes.freeze());
+        let ByteStream { mut object, length } = byte_stream;
+
+        let body = object.as_stream();
         let req = PutObjectRequest {
             bucket: self.config.bucket.clone(),
             key: format!("{}/{}", self.config.prefix, snapshot.0),
             body: Some(rusoto_s3::StreamingBody::new(body)),
             metadata: Some(self.gen_metadata()),
-            content_length: Some(content_length as i64),
+            content_length: Some(length as i64),
             ..Default::default()
         };
+
         self.client.put_object(req).await?;
+
         Ok(())
     }
 

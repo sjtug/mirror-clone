@@ -97,4 +97,6 @@ pub struct Opts {
     pub concurrent_resolve: usize,
     #[structopt(long, help = "Concurrent transfer tasks", default_value = "8")]
     pub concurrent_transfer: usize,
+    #[structopt(long, help = "Don't delete files")]
+    pub no_delete: bool,
 }

@@ -15,8 +15,10 @@ By assembling them, we can get a task that transfers one repo to another.
 
 ## Quick Start
 
-RUST_LOG=info cargo run --release -- --progress --target-type s3 --s3-prefix homebrew-bottles --s3-buffer-path /tmp homebrew
-RUST_LOG=info cargo run --release -- --progress --target-type s3 --s3-prefix crates.io/crates --s3-buffer-path /tmp crates-io
+```
+RUST_LOG=info ./mirror-clone --progress --target-type s3 --s3-prefix homebrew-bottles --s3-buffer-path /srv/disk1/mirror-clone-cache homebrew
+RUST_LOG=info ./mirror-clone --progress --target-type s3 --s3-prefix crates.io/crates --s3-buffer-path /srv/disk1/mirror-clone-cache crates-io
+```
 
 ## Implementation
 

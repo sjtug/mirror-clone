@@ -4,7 +4,7 @@ use crate::traits::{SnapshotStorage, SourceStorage};
 use crate::utils::bar;
 
 use async_trait::async_trait;
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::{stream, StreamExt, TryStreamExt};
 use regex::Regex;
 use slog::{info, warn};
 use structopt::StructOpt;
@@ -59,7 +59,7 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
         progress.set_style(bar());
 
         let packages: Result<Vec<Vec<(String, String)>>> =
-            futures::stream::iter(caps.into_iter().map(|(url, name)| {
+            stream::iter(caps.into_iter().map(|(url, name)| {
                 let client = client.clone();
                 let simple_base = self.simple_base.clone();
                 let progress = progress.clone();
@@ -113,6 +113,8 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
 #[async_trait]
 impl SourceStorage<SnapshotPath, TransferURL> for Pypi {
     async fn get_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<TransferURL> {
-        Ok(TransferURL(format!("{}/{}", self.package_base, snapshot.0)))
+        let parsed = url::Url::parse(&format!("{}/{}", self.package_base, snapshot.0)).unwrap();
+        let cleaned: &str = &parsed[..url::Position::AfterPath];
+        Ok(TransferURL(cleaned.to_string()))
     }
 }

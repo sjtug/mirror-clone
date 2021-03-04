@@ -3,7 +3,7 @@ use crate::error::{Error, Result};
 use crate::traits::SnapshotStorage;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::{stream, StreamExt, TryStreamExt};
 use regex::Regex;
 use slog::{info, warn};
 
@@ -45,7 +45,7 @@ impl SnapshotStorage<SnapshotPath> for Rustup {
         }
 
         let packages: Result<Vec<Vec<String>>> =
-            futures::stream::iter(targets.into_iter().map(|(day_string, channel)| {
+            stream::iter(targets.into_iter().map(|(day_string, channel)| {
                 let client = client.clone();
                 let base = self.base.clone();
                 let progress = progress.clone();

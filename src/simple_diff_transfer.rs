@@ -1,3 +1,4 @@
+use futures_util::{stream, StreamExt};
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::ClientBuilder;
 
@@ -7,7 +8,6 @@ use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
 use crate::traits::{SnapshotStorage, SourceStorage, TargetStorage};
 use crate::utils::{create_logger, spinner};
 
-use futures_util::StreamExt;
 use iter_set::{classify, Inclusion};
 use rand::prelude::*;
 use slog::{debug, info, o, warn};
@@ -24,6 +24,7 @@ enum PlanType {
 pub struct SimpleDiffTransferConfig {
     pub progress: bool,
     pub concurrent_transfer: usize,
+    pub no_delete: bool,
     pub snapshot_config: SnapshotConfig,
 }
 
@@ -277,7 +278,7 @@ where
             }
         };
 
-        let mut results = futures::stream::iter(
+        let mut results = stream::iter(
             updates
                 .into_iter()
                 .map(|plan| map_snapshot(plan, PlanType::Update)),
@@ -288,20 +289,22 @@ where
             progress.inc(1);
         }
 
-        info!(logger, "deleting objects");
+        if !self.config.no_delete {
+            info!(logger, "deleting objects");
 
-        progress.set_length(deletions.len() as u64);
-        progress.set_position(0);
+            progress.set_length(deletions.len() as u64);
+            progress.set_position(0);
 
-        let mut results = futures::stream::iter(
-            deletions
-                .into_iter()
-                .map(|plan| map_snapshot(plan, PlanType::Delete)),
-        )
-        .buffer_unordered(self.config.concurrent_transfer);
+            let mut results = stream::iter(
+                deletions
+                    .into_iter()
+                    .map(|plan| map_snapshot(plan, PlanType::Delete)),
+            )
+            .buffer_unordered(self.config.concurrent_transfer);
 
-        while let Some(_x) = results.next().await {
-            progress.inc(1);
+            while let Some(_x) = results.next().await {
+                progress.inc(1);
+            }
         }
 
         info!(logger, "transfer complete");
