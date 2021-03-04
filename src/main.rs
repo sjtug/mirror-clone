@@ -75,8 +75,9 @@ fn main() {
     };
     let transfer_config = simple_diff_transfer::SimpleDiffTransferConfig {
         progress: opts.progress,
-        concurrent_transfer: opts.concurrent_transfer,
-        no_delete: opts.no_delete,
+        concurrent_transfer: opts.transfer_config.concurrent_transfer,
+        no_delete: opts.transfer_config.no_delete,
+        print_plan: opts.transfer_config.print_plan,
         snapshot_config,
     };
 

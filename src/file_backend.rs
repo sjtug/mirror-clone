@@ -1,5 +1,3 @@
-
-
 use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::{Error, Result};
 use crate::stream_pipe::ByteStream;

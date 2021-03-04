@@ -103,6 +103,20 @@ impl std::str::FromStr for Target {
 }
 
 #[derive(StructOpt, Debug)]
+pub struct TransferConfig {
+    #[structopt(long, help = "Concurrent transfer tasks", default_value = "8")]
+    pub concurrent_transfer: usize,
+    #[structopt(long, help = "Don't delete files")]
+    pub no_delete: bool,
+    #[structopt(
+        long,
+        help = "Print first n records of transfer plan",
+        default_value = "0"
+    )]
+    pub print_plan: usize,
+}
+
+#[derive(StructOpt, Debug)]
 #[structopt(version = "2.0", author = "Alex Chi <iskyzh@gmail.com>")]
 pub struct Opts {
     #[structopt(subcommand)]
@@ -121,8 +135,6 @@ pub struct Opts {
     pub workers: Option<usize>,
     #[structopt(long, help = "Concurrent resolve tasks", default_value = "64")]
     pub concurrent_resolve: usize,
-    #[structopt(long, help = "Concurrent transfer tasks", default_value = "8")]
-    pub concurrent_transfer: usize,
-    #[structopt(long, help = "Don't delete files")]
-    pub no_delete: bool,
+    #[structopt(flatten)]
+    pub transfer_config: TransferConfig,
 }

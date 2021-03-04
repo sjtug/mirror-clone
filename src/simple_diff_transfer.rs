@@ -26,6 +26,7 @@ pub struct SimpleDiffTransferConfig {
     pub concurrent_transfer: usize,
     pub no_delete: bool,
     pub snapshot_config: SnapshotConfig,
+    pub print_plan: usize,
 }
 
 pub struct SimpleDiffTransfer<Source, Target, Item>
@@ -192,7 +193,7 @@ where
         for result in classify(source_snapshot, target_snapshot) {
             match result {
                 Inclusion::Left(source) => {
-                    if max_info < 100 {
+                    if max_info < self.config.print_plan {
                         info!(logger, "+ {:?}", source.0);
                         max_info += 1;
                     }
@@ -200,7 +201,7 @@ where
                 }
                 Inclusion::Both(_, _) => {}
                 Inclusion::Right(target) => {
-                    if max_info < 100 {
+                    if max_info < self.config.print_plan {
                         info!(logger, "- {:?}", target.0);
                         max_info += 1;
                     }
