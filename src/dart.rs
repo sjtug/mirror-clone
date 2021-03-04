@@ -3,7 +3,7 @@ use crate::error::{Error, Result};
 use crate::traits::SnapshotStorage;
 
 use async_trait::async_trait;
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::{stream, StreamExt, TryStreamExt};
 use serde_json::Value;
 use slog::{info, warn};
 
@@ -67,7 +67,7 @@ impl SnapshotStorage<SnapshotPath> for Dart {
         progress.inc_length(package_name.len() as u64);
 
         let snapshots: Result<Vec<Vec<String>>> =
-            futures::stream::iter(package_name.into_iter().map(|name| {
+            stream::iter(package_name.into_iter().map(|name| {
                 let client = client.clone();
                 let base = format!("{}/", self.base);
                 let progress = progress.clone();

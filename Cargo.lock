@@ -821,7 +821,7 @@ dependencies = [
  "chrono",
  "console 0.13.0",
  "flate2",
- "futures",
+ "futures-core",
  "futures-retry",
  "futures-util",
  "indicatif",
@@ -846,6 +846,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-util",
+ "url",
  "walkdir",
  "zip",
 ]
