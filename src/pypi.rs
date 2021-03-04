@@ -65,6 +65,7 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
                 let progress = progress.clone();
                 let matcher = matcher.clone();
                 let logger = logger.clone();
+
                 let func = async move {
                     progress.set_message(&name);
                     let package = client
@@ -75,7 +76,12 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
                         .await?;
                     let caps: Vec<(String, String)> = matcher
                         .captures_iter(&package)
-                        .map(|cap| (cap[1].to_string(), cap[2].to_string()))
+                        .map(|cap| {
+                            let url = format!("{}/{}{}", simple_base, url, &cap[1]);
+                            let parsed = url::Url::parse(&url).unwrap();
+                            let cleaned: &str = &parsed[..url::Position::AfterPath];
+                            (cleaned.to_string(), cap[2].to_string())
+                        })
                         .collect();
                     progress.inc(1);
                     Ok::<Vec<(String, String)>, Error>(caps)
@@ -94,10 +100,22 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
             .try_collect()
             .await;
 
+        let package_base = if self.package_base.ends_with("/") {
+            self.package_base.clone()
+        } else {
+            format!("{}/", self.package_base)
+        };
+
         let snapshot = packages?
             .into_iter()
             .flatten()
-            .map(|(url, _)| url.replace("../../packages/", "").to_string())
+            .filter_map(|(url, _)| {
+                if url.starts_with(&package_base) {
+                    Some(url[package_base.len()..].to_string())
+                } else {
+                    None
+                }
+            })
             .collect();
 
         progress.finish_with_message("done");
@@ -113,8 +131,6 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
 #[async_trait]
 impl SourceStorage<SnapshotPath, TransferURL> for Pypi {
     async fn get_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<TransferURL> {
-        let parsed = url::Url::parse(&format!("{}/{}", self.package_base, snapshot.0)).unwrap();
-        let cleaned: &str = &parsed[..url::Position::AfterPath];
-        Ok(TransferURL(cleaned.to_string()))
+        Ok(TransferURL(format!("{}/{}", self.package_base, snapshot.0)))
     }
 }
