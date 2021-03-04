@@ -2,8 +2,9 @@ use std::{collections::HashMap, sync::atomic::AtomicU64};
 
 use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::{Error, Result};
+use crate::metadata::SnapshotMeta;
 use crate::stream_pipe::ByteStream;
-use crate::traits::{SnapshotStorage, TargetStorage};
+use crate::traits::{Key, SnapshotStorage, TargetStorage};
 
 use async_trait::async_trait;
 use futures_util::{stream, StreamExt};
@@ -66,12 +67,12 @@ impl S3Backend {
 }
 
 #[async_trait]
-impl SnapshotStorage<SnapshotPath> for S3Backend {
+impl SnapshotStorage<SnapshotMeta> for S3Backend {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<SnapshotPath>> {
+    ) -> Result<Vec<SnapshotMeta>> {
         let logger = mission.logger;
         let progress = mission.progress;
 
@@ -119,22 +120,33 @@ impl SnapshotStorage<SnapshotPath> for S3Backend {
                         let resp = client.list_objects_v2(req).await?;
 
                         let mut first_key = true;
-                        for item in resp.contents.unwrap() {
-                            if let Some(size) = item.size {
-                                total_size
-                                    .fetch_add(size as u64, std::sync::atomic::Ordering::SeqCst);
-                            }
-                            let key = item.key.unwrap();
-                            if key.starts_with(&s3_prefix_base) {
-                                let key = key[s3_prefix_base.len()..].to_string();
-                                // let key = crate::utils::rewrite_url_string(&gen_map, &key);
-                                if first_key {
-                                    first_key = false;
-                                    progress.set_message(&key);
+
+                        if let Some(contents) = resp.contents {
+                            for item in contents {
+                                if let Some(size) = item.size {
+                                    total_size.fetch_add(
+                                        size as u64,
+                                        std::sync::atomic::Ordering::SeqCst,
+                                    );
                                 }
-                                snapshot.push(SnapshotPath(key));
-                            } else {
-                                warn!(logger, "prefix not match {}", key);
+                                let key = item.key.unwrap();
+                                if key.starts_with(&s3_prefix_base) {
+                                    let key = key[s3_prefix_base.len()..].to_string();
+                                    // let key = crate::utils::rewrite_url_string(&gen_map, &key);
+                                    if first_key {
+                                        first_key = false;
+                                        progress.set_message(&key);
+                                    }
+                                    snapshot.push(SnapshotMeta {
+                                        key,
+                                        size: item.size.map(|x| x as u64),
+                                        last_modified: None,
+                                        checksum: None,
+                                        checksum_method: None,
+                                    });
+                                } else {
+                                    warn!(logger, "prefix not match {}", key);
+                                }
                             }
                         }
 
@@ -171,29 +183,87 @@ impl SnapshotStorage<SnapshotPath> for S3Backend {
     }
 
     fn info(&self) -> String {
-        format!("s3, {:?}", self.config)
+        format!("s3 with meta, {:?}", self.config)
     }
 }
 
 #[async_trait]
-impl TargetStorage<SnapshotPath, ByteStream> for S3Backend {
+impl SnapshotStorage<SnapshotPath> for S3Backend {
+    async fn snapshot(
+        &mut self,
+        mission: Mission,
+        config: &SnapshotConfig,
+    ) -> Result<Vec<SnapshotPath>> {
+        Ok(
+            <Self as SnapshotStorage<SnapshotMeta>>::snapshot(self, mission, config)
+                .await?
+                .into_iter()
+                .map(|x| SnapshotPath(x.key))
+                .collect(),
+        )
+    }
+
+    fn info(&self) -> String {
+        format!("s3, {:?}", self.config)
+    }
+}
+pub trait S3Metadata {
+    fn s3_meta(&self) -> HashMap<String, String>;
+}
+
+impl S3Metadata for SnapshotPath {
+    fn s3_meta(&self) -> HashMap<String, String> {
+        HashMap::new()
+    }
+}
+
+impl S3Metadata for SnapshotMeta {
+    fn s3_meta(&self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        if let Some(checksum_method) = &self.checksum_method {
+            map.insert(
+                "clone-checksum-method".to_string(),
+                checksum_method.to_string(),
+            );
+        }
+        if let Some(checksum) = &self.checksum {
+            map.insert("clone-checksum".to_string(), checksum.to_string());
+        }
+        map
+    }
+}
+
+#[async_trait]
+impl<Snapshot> TargetStorage<Snapshot, ByteStream> for S3Backend
+where
+    Snapshot: Key + S3Metadata,
+{
     async fn put_object(
         &self,
-        snapshot: &SnapshotPath,
+        snapshot: &Snapshot,
         byte_stream: ByteStream,
         mission: &Mission,
     ) -> Result<()> {
         let logger = &mission.logger;
-        debug!(logger, "upload: {}", snapshot.0);
+        debug!(logger, "upload: {}", snapshot.key());
 
-        let ByteStream { mut object, length } = byte_stream;
+        let ByteStream {
+            mut object,
+            length,
+            modified_at,
+        } = byte_stream;
 
         let body = object.as_stream();
+
+        let mut metadata = self.gen_metadata();
+        metadata.insert("clone-last-modified".to_string(), modified_at.to_string());
+        metadata.extend(snapshot.s3_meta());
+
         let req = PutObjectRequest {
             bucket: self.config.bucket.clone(),
-            key: format!("{}/{}", self.config.prefix, snapshot.0),
+            key: format!("{}/{}", self.config.prefix, snapshot.key()),
             body: Some(rusoto_s3::StreamingBody::new(body)),
-            metadata: Some(self.gen_metadata()),
+            metadata: Some(metadata),
             content_length: Some(length as i64),
             ..Default::default()
         };
@@ -203,10 +273,10 @@ impl TargetStorage<SnapshotPath, ByteStream> for S3Backend {
         Ok(())
     }
 
-    async fn delete_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<()> {
+    async fn delete_object(&self, snapshot: &Snapshot, _mission: &Mission) -> Result<()> {
         let req = DeleteObjectRequest {
             bucket: self.config.bucket.clone(),
-            key: format!("{}/{}", self.config.prefix, snapshot.0),
+            key: format!("{}/{}", self.config.prefix, snapshot.key()),
             ..Default::default()
         };
         self.client.delete_object(req).await?;

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::DateTime;
 
 use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
@@ -58,6 +59,7 @@ impl Drop for ByteObject {
 pub struct ByteStream {
     pub object: ByteObject,
     pub length: u64,
+    pub modified_at: u64,
 }
 
 pub struct ByteStreamPipe<Source: std::fmt::Debug> {
@@ -136,6 +138,15 @@ where
 
         let mut total_bytes: u64 = 0;
         let content_length = response.content_length();
+        let modified_at = std::str::from_utf8(
+            response
+                .headers()
+                .get(reqwest::header::LAST_MODIFIED)
+                .unwrap()
+                .as_bytes(),
+        )
+        .unwrap()
+        .to_owned();
 
         debug!(logger, "download: {} {:?}", transfer_url.0, content_length);
 
@@ -160,12 +171,14 @@ where
 
         f.seek(std::io::SeekFrom::Start(0)).await?;
 
+        // TODO: check snapshot http modified_at consistency
         Ok(ByteStream {
             object: ByteObject::LocalFile {
                 file: Some(f),
                 path: Some(path.into()),
             },
             length: total_bytes,
+            modified_at: DateTime::parse_from_rfc2822(&modified_at)?.timestamp() as u64,
         })
     }
 }

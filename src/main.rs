@@ -1,4 +1,5 @@
 mod common;
+mod conda;
 mod crates_io;
 mod dart;
 mod error;
@@ -7,6 +8,7 @@ mod github_release;
 mod gradle;
 mod homebrew;
 mod html_scanner;
+mod metadata;
 mod mirror_intel;
 mod opts;
 mod pypi;
@@ -90,6 +92,13 @@ fn main() {
                 transfer!(opts, source, transfer_config);
             }
             Source::CratesIo(source) => {
+                transfer!(opts, source, transfer_config);
+            }
+            Source::Conda(config) => {
+                let source = conda::Conda::new(config);
+                transfer!(opts, source, transfer_config);
+            }
+            Source::Rsync(source) => {
                 transfer!(opts, source, transfer_config);
             }
         }

@@ -29,15 +29,32 @@ pub trait TargetStorage<SnapshotItem, TargetItem> {
 }
 
 #[async_trait]
-impl<Source> SourceStorage<SnapshotPath, TransferPath> for Source
+impl<Source, Snapshot> SourceStorage<Snapshot, TransferPath> for Source
 where
-    Source: SnapshotStorage<SnapshotPath> + Send + Sync,
+    Source: SnapshotStorage<Snapshot> + Send + Sync,
+    Snapshot: Key,
 {
-    async fn get_object(
-        &self,
-        snapshot: &SnapshotPath,
-        _mission: &Mission,
-    ) -> Result<TransferPath> {
-        Ok(TransferPath(snapshot.0.clone()))
+    async fn get_object(&self, snapshot: &Snapshot, _mission: &Mission) -> Result<TransferPath> {
+        Ok(TransferPath(snapshot.key().to_string()))
+    }
+}
+
+pub trait Key: Send + Sync + 'static {
+    fn key(&self) -> &str;
+}
+
+pub trait Diff {
+    fn diff(&self, other: &Self) -> bool;
+}
+
+impl Key for SnapshotPath {
+    fn key(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Diff for SnapshotPath {
+    fn diff(&self, _other: &Self) -> bool {
+        false
     }
 }
