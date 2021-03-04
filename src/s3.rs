@@ -1,24 +1,22 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::atomic::AtomicU64};
 
 use crate::common::{Mission, SnapshotConfig, SnapshotPath};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::stream_pipe::ByteStream;
 use crate::traits::{SnapshotStorage, TargetStorage};
 
 use async_trait::async_trait;
+use futures_util::{stream, StreamExt};
 use rusoto_core::Region;
 use rusoto_s3::{DeleteObjectRequest, ListObjectsV2Request, PutObjectRequest, S3Client, S3};
 use slog::{debug, info, warn};
-use structopt::StructOpt;
 
-#[derive(StructOpt, Debug)]
+#[derive(Debug)]
 pub struct S3Config {
-    #[structopt(long, default_value = "https://s3.jcloud.sjtu.edu.cn")]
     pub endpoint: String,
-    #[structopt(long, default_value = "899a892efef34b1b944a19981040f55b-oss01")]
     pub bucket: String,
-    #[structopt(long)]
     pub prefix: String,
+    pub prefix_hint_mode: Option<String>,
 }
 
 impl S3Config {
@@ -27,6 +25,7 @@ impl S3Config {
             endpoint: "https://s3.jcloud.sjtu.edu.cn".to_string(),
             bucket: "899a892efef34b1b944a19981040f55b-oss01".to_string(),
             prefix,
+            prefix_hint_mode: None,
         }
     }
 }
@@ -78,50 +77,89 @@ impl SnapshotStorage<SnapshotPath> for S3Backend {
 
         info!(logger, "fetching data from S3 storage...");
 
-        let mut continuation_token = None;
-        let mut snapshot = vec![];
-
         let s3_prefix_base = format!("{}/", self.config.prefix);
-        let mut total_size: u64 = 0;
+        let total_size = std::sync::Arc::new(AtomicU64::new(0));
 
-        loop {
-            let req = ListObjectsV2Request {
-                bucket: self.config.bucket.clone(),
-                prefix: Some(self.config.prefix.clone()),
-                continuation_token,
-                ..Default::default()
-            };
-
-            let resp = self.client.list_objects_v2(req).await?;
-
-            let mut first_key = true;
-            for item in resp.contents.unwrap() {
-                if let Some(size) = item.size {
-                    total_size += size as u64;
+        let prefix = match self.config.prefix_hint_mode.as_ref().map(|x| x.as_str()) {
+            Some("pypi") => {
+                let mut prefix = vec![];
+                for i in 0..256 {
+                    prefix.push(format!("/{:02x}", i));
                 }
-                let key = item.key.unwrap();
-                if key.starts_with(&s3_prefix_base) {
-                    let key = key[s3_prefix_base.len()..].to_string();
-                    // let key = crate::utils::rewrite_url_string(&gen_map, &key);
-                    if first_key {
-                        first_key = false;
-                        progress.set_message(&key);
+                prefix
+            }
+            None => vec!["".to_string()],
+            Some(other) => {
+                panic!("unsupported prefix hint mode {}", other);
+            }
+        };
+
+        let mut futures = stream::iter(prefix)
+            .map(|additional_prefix| {
+                let bucket = self.config.bucket.clone();
+                let prefix = Some(format!("{}{}", self.config.prefix, additional_prefix));
+                let client = self.client.clone();
+                let total_size = total_size.clone();
+                let progress = progress.clone();
+                let logger = logger.clone();
+                let s3_prefix_base = s3_prefix_base.clone();
+
+                let scan_future = async move {
+                    let mut snapshot = vec![];
+                    let mut continuation_token = None;
+
+                    loop {
+                        let req = ListObjectsV2Request {
+                            bucket: bucket.clone(),
+                            prefix: prefix.clone(),
+                            continuation_token,
+                            ..Default::default()
+                        };
+
+                        let resp = client.list_objects_v2(req).await?;
+
+                        let mut first_key = true;
+                        for item in resp.contents.unwrap() {
+                            if let Some(size) = item.size {
+                                total_size
+                                    .fetch_add(size as u64, std::sync::atomic::Ordering::SeqCst);
+                            }
+                            let key = item.key.unwrap();
+                            if key.starts_with(&s3_prefix_base) {
+                                let key = key[s3_prefix_base.len()..].to_string();
+                                // let key = crate::utils::rewrite_url_string(&gen_map, &key);
+                                if first_key {
+                                    first_key = false;
+                                    progress.set_message(&key);
+                                }
+                                snapshot.push(SnapshotPath(key));
+                            } else {
+                                warn!(logger, "prefix not match {}", key);
+                            }
+                        }
+
+                        if let Some(next_continuation_token) = resp.next_continuation_token {
+                            continuation_token = Some(next_continuation_token);
+                        } else {
+                            break;
+                        }
                     }
-                    snapshot.push(SnapshotPath(key));
-                } else {
-                    warn!(logger, "prefix not match {}", key);
-                }
-            }
+                    Ok::<_, Error>(snapshot)
+                };
 
-            if let Some(next_continuation_token) = resp.next_continuation_token {
-                continuation_token = Some(next_continuation_token);
-            } else {
-                break;
-            }
+                scan_future
+            })
+            .buffer_unordered(256);
+
+        let mut snapshots = vec![];
+
+        while let Some(snapshot) = futures.next().await {
+            snapshots.append(&mut snapshot?);
         }
 
         progress.finish_with_message("done");
 
+        let total_size = total_size.load(std::sync::atomic::Ordering::SeqCst);
         info!(
             logger,
             "total size: {}B or {}G",
@@ -129,7 +167,7 @@ impl SnapshotStorage<SnapshotPath> for S3Backend {
             total_size as f64 / 1000.0 / 1000.0 / 1000.0
         );
 
-        Ok(snapshot)
+        Ok(snapshots)
     }
 
     fn info(&self) -> String {

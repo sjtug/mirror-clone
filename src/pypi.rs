@@ -47,7 +47,7 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
 
         info!(logger, "parsing index...");
         if self.debug {
-            index = index[..100000].to_string();
+            index = index[..1000].to_string();
         }
         let caps: Vec<(String, String)> = matcher
             .captures_iter(&index)
