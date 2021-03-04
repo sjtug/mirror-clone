@@ -13,6 +13,11 @@ https://github.com/sjtug/mirror-clone/issues/14
 mirror-clone revolves around abstractions like source, target, snapshot, and transfer.
 By assembling them, we can get a task that transfers one repo to another.
 
+## Quick Start
+
+RUST_LOG=info cargo run --release -- --progress --target-type s3 --s3-prefix homebrew-bottles --s3-buffer-path /tmp homebrew
+RUST_LOG=info cargo run --release -- --progress --target-type s3 --s3-prefix crates.io/crates --s3-buffer-path /tmp crates-io
+
 ## Implementation
 
 ### Transfer
@@ -21,16 +26,15 @@ By assembling them, we can get a task that transfers one repo to another.
 
 ### Snapshot
 
-* rsync snapshot, gets file list of a rsync repo.
-* PyPI snapshot, gets all packages from PyPI simple index.
-* rustup snapshot, gets all toolchains from `channel-xxx-xxxx.toml`
+Refer to source code for more information.
 
 ### Source
 
-Currently all snapshots are also source. We'll add standalone source later.
+Refer to source code for more information.
 ### Target
 
 * mirror-intel, sends HEAD request to [mirror-intel](https://github.com/sjtug/mirror-intel) endpoint, so as to fill the mirror-intel cache.
+* S3
 
 ## Commands
 
