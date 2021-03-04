@@ -74,7 +74,7 @@ impl SnapshotStorage<SnapshotPath> for CratesIo {
                 Ok(None) => break,
                 Err(e) => return Err(e.into()),
             }
-            if self.debug && idx >= 100 {
+            if self.debug && idx >= 10000 {
                 break;
             }
             tokio::task::yield_now().await;
