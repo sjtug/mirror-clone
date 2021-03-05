@@ -4,7 +4,6 @@ use crate::traits::{Key, SnapshotStorage, TargetStorage};
 use crate::{
     common::{Mission, SnapshotConfig, SnapshotPath},
     metadata::SnapshotMeta,
-    opts::Target,
 };
 
 use async_trait::async_trait;

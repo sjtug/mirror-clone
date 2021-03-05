@@ -1,5 +1,6 @@
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
+use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
+use crate::metadata::SnapshotMeta;
 use crate::traits::{SnapshotStorage, SourceStorage};
 
 use async_trait::async_trait;
@@ -25,11 +26,18 @@ pub struct Conda {
     repos: CondaRepos,
 }
 
-fn parse_index(data: &[u8]) -> Result<Vec<String>> {
+fn parse_index(repo: &str, data: &[u8]) -> Result<Vec<SnapshotMeta>> {
     let v: JsonValue = serde_json::from_slice(data)?;
     let mut result = vec![];
 
-    let package_mapper = |(key, _value): (&String, &JsonValue)| key.clone();
+    let package_mapper = |(key, value): (&String, &JsonValue)| SnapshotMeta {
+        key: format!("{}/{}", repo, key),
+        size: value.get("size").map(|x| x.as_u64().unwrap()),
+        last_modified: None,
+        checksum_method: value.get("sha256").map(|_| "sha256".to_string()),
+        checksum: value.get("sha256").map(|x| x.as_str().unwrap().to_owned()),
+        force: None,
+    };
 
     if let Some(JsonValue::Object(map)) = v.get("packages") {
         result.append(&mut map.iter().map(package_mapper).collect());
@@ -56,12 +64,12 @@ impl std::fmt::Debug for Conda {
 }
 
 #[async_trait]
-impl SnapshotStorage<SnapshotPath> for Conda {
+impl SnapshotStorage<SnapshotMeta> for Conda {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<SnapshotPath>> {
+    ) -> Result<Vec<SnapshotMeta>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -78,13 +86,13 @@ impl SnapshotStorage<SnapshotPath> for Conda {
                 let mut snapshot = vec![];
                 let repodata = format!("{}/{}/repodata.json", base, repo);
                 let index_data = client.get(&repodata).send().await?.bytes().await?;
-                let packages = parse_index(&index_data)?;
-                snapshot.extend(packages.into_iter().map(|pkg| format!("{}/{}", repo, pkg)));
+                let packages = parse_index(&repo, &index_data)?;
+                snapshot.extend(packages.into_iter());
                 progress.set_message(&repo);
                 snapshot.append(&mut vec![
-                    "repodata.json".to_string(),
-                    "repodata.json.bz2".to_string(),
-                    "current_repodata.json".to_string(),
+                    SnapshotMeta::force(format!("{}/{}/repodata.json", base, repo)),
+                    SnapshotMeta::force(format!("{}/{}/repodata.json.bz2", base, repo)),
+                    SnapshotMeta::force(format!("{}/{}/current_repodata.json", base, repo)),
                 ]);
                 Ok::<_, Error>(snapshot)
             };
@@ -105,7 +113,6 @@ impl SnapshotStorage<SnapshotPath> for Conda {
             .await?
             .into_iter()
             .flatten()
-            .map(SnapshotPath)
             .collect::<Vec<_>>();
 
         Ok(snapshots)
@@ -117,8 +124,8 @@ impl SnapshotStorage<SnapshotPath> for Conda {
 }
 
 #[async_trait]
-impl SourceStorage<SnapshotPath, TransferURL> for Conda {
-    async fn get_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<TransferURL> {
-        Ok(TransferURL(format!("{}/{}", self.repos.base, snapshot.0)))
+impl SourceStorage<SnapshotMeta, TransferURL> for Conda {
+    async fn get_object(&self, snapshot: &SnapshotMeta, _mission: &Mission) -> Result<TransferURL> {
+        Ok(TransferURL(format!("{}/{}", self.repos.base, snapshot.key)))
     }
 }
