@@ -95,8 +95,7 @@ impl SnapshotStorage<SnapshotMeta> for Rsync {
                         key: file.to_string(),
                         size: Some(size.parse().unwrap()),
                         last_modified: Some(datetime.timestamp() as u64),
-                        checksum_method: None,
-                        checksum: None,
+                        ..Default::default()
                     };
                     snapshot.push(meta);
                 }

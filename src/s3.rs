@@ -140,9 +140,7 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
                                     snapshot.push(SnapshotMeta {
                                         key,
                                         size: item.size.map(|x| x as u64),
-                                        last_modified: None,
-                                        checksum: None,
-                                        checksum_method: None,
+                                        ..Default::default()
                                     });
                                 } else {
                                     warn!(logger, "prefix not match {}", key);
