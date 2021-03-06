@@ -24,6 +24,10 @@ impl SnapshotMeta {
     pub fn force(key: String) -> Self {
         Self {
             key,
+            flags: SnapshotMetaFlag {
+                force: true,
+                force_last: true,
+            },
             ..Default::default()
         }
     }
