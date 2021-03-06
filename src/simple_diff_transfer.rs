@@ -5,7 +5,7 @@ use reqwest::ClientBuilder;
 use crate::common::{Mission, SnapshotConfig};
 use crate::error::{Error, Result};
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
-use crate::traits::{Diff, Key, SnapshotStorage, SourceStorage, TargetStorage};
+use crate::traits::{Diff, Key, Metadata, SnapshotStorage, SourceStorage, TargetStorage};
 use crate::utils::{create_logger, spinner};
 
 use iter_set::{classify_by, Inclusion};
@@ -31,7 +31,7 @@ pub struct SimpleDiffTransferConfig {
 
 pub struct SimpleDiffTransfer<Snapshot, Source, Target, Item>
 where
-    Snapshot: Diff + Key,
+    Snapshot: Diff + Key + Metadata,
     Source: SourceStorage<Snapshot, Item> + SnapshotStorage<Snapshot>,
     Target: TargetStorage<Snapshot, Item> + SnapshotStorage<Snapshot>,
 {
@@ -43,7 +43,7 @@ where
 
 impl<Snapshot, Source, Target, Item> SimpleDiffTransfer<Snapshot, Source, Target, Item>
 where
-    Snapshot: Diff + Key,
+    Snapshot: Diff + Key + Metadata,
     Source: SourceStorage<Snapshot, Item> + SnapshotStorage<Snapshot>,
     Target: TargetStorage<Snapshot, Item> + SnapshotStorage<Snapshot>,
 {
@@ -225,6 +225,10 @@ where
                 }
             }
         }
+
+        // sort plan by priority
+        updates.sort_by_key(|snapshot| -snapshot.priority());
+        deletions.sort_by_key(|snapshot| -snapshot.priority());
 
         info!(
             logger,

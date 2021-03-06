@@ -1,6 +1,6 @@
 use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
-use crate::metadata::SnapshotMeta;
+use crate::metadata::{SnapshotMeta, SnapshotMetaFlag};
 use crate::traits::{SnapshotStorage, SourceStorage};
 
 use async_trait::async_trait;
@@ -36,7 +36,10 @@ fn parse_index(repo: &str, data: &[u8]) -> Result<Vec<SnapshotMeta>> {
         last_modified: None,
         checksum_method: value.get("sha256").map(|_| "sha256".to_string()),
         checksum: value.get("sha256").map(|x| x.as_str().unwrap().to_owned()),
-        force: None,
+        flags: SnapshotMetaFlag {
+            force: true,
+            force_last: true,
+        },
     };
 
     if let Some(JsonValue::Object(map)) = v.get("packages") {
