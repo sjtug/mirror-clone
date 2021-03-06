@@ -58,6 +58,7 @@ impl Into<S3Backend> for S3CliConfig {
         if let Some(bucket) = self.s3_bucket {
             config.bucket = bucket;
         }
+        config.max_keys = self.s3_max_keys;
         config.prefix_hint_mode = self.s3_prefix_hint_mode;
         S3Backend::new(config)
     }
@@ -81,6 +82,8 @@ pub struct S3CliConfig {
     pub s3_buffer_path: Option<String>,
     #[structopt(long, help = "Prefix hint mode, to accelerate scanning")]
     pub s3_prefix_hint_mode: Option<String>,
+    #[structopt(long, help = "Max keys to list at a time", default_value = "1000")]
+    pub s3_max_keys: u64,
 }
 
 #[derive(StructOpt, Debug)]

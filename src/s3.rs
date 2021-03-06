@@ -18,6 +18,7 @@ pub struct S3Config {
     pub bucket: String,
     pub prefix: String,
     pub prefix_hint_mode: Option<String>,
+    pub max_keys: u64,
 }
 
 impl S3Config {
@@ -26,6 +27,7 @@ impl S3Config {
             endpoint: "https://s3.jcloud.sjtu.edu.cn".to_string(),
             bucket: "899a892efef34b1b944a19981040f55b-oss01".to_string(),
             prefix,
+            max_keys: 1000,
             prefix_hint_mode: None,
         }
     }
@@ -104,6 +106,7 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
                 let progress = progress.clone();
                 let logger = logger.clone();
                 let s3_prefix_base = s3_prefix_base.clone();
+                let max_keys = self.config.max_keys;
 
                 let scan_future = async move {
                     let mut snapshot = vec![];
@@ -113,6 +116,7 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
                         let req = ListObjectsV2Request {
                             bucket: bucket.clone(),
                             prefix: prefix.clone(),
+                            max_keys: Some(max_keys as i64),
                             continuation_token,
                             ..Default::default()
                         };

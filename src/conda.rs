@@ -90,9 +90,9 @@ impl SnapshotStorage<SnapshotMeta> for Conda {
                 snapshot.extend(packages.into_iter());
                 progress.set_message(&repo);
                 snapshot.append(&mut vec![
-                    SnapshotMeta::force(format!("{}/{}/repodata.json", base, repo)),
-                    SnapshotMeta::force(format!("{}/{}/repodata.json.bz2", base, repo)),
-                    SnapshotMeta::force(format!("{}/{}/current_repodata.json", base, repo)),
+                    SnapshotMeta::force(format!("{}/repodata.json", repo)),
+                    SnapshotMeta::force(format!("{}/repodata.json.bz2", repo)),
+                    SnapshotMeta::force(format!("{}/current_repodata.json", repo)),
                 ]);
                 Ok::<_, Error>(snapshot)
             };
