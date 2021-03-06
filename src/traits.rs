@@ -43,6 +43,12 @@ pub trait Key: Send + Sync + 'static {
     fn key(&self) -> &str;
 }
 
+pub trait Metadata {
+    fn priority(&self) -> isize {
+        0
+    }
+}
+
 pub trait Diff {
     fn diff(&self, other: &Self) -> bool;
 }
@@ -58,3 +64,5 @@ impl Diff for SnapshotPath {
         false
     }
 }
+
+impl Metadata for SnapshotPath {}

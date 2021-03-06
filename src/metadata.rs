@@ -2,7 +2,13 @@ use async_trait::async_trait;
 
 use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::Result;
-use crate::traits::{Diff, Key, SnapshotStorage};
+use crate::traits::{Diff, Key, Metadata, SnapshotStorage};
+
+#[derive(Clone, Debug, Default)]
+pub struct SnapshotMetaFlag {
+    pub force: bool,
+    pub force_last: bool,
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct SnapshotMeta {
@@ -11,14 +17,13 @@ pub struct SnapshotMeta {
     pub last_modified: Option<u64>,
     pub checksum_method: Option<String>,
     pub checksum: Option<String>,
-    pub force: Option<bool>,
+    pub flags: SnapshotMetaFlag,
 }
 
 impl SnapshotMeta {
     pub fn force(key: String) -> Self {
         Self {
             key,
-            force: Some(true),
             ..Default::default()
         }
     }
@@ -76,6 +81,19 @@ impl Diff for SnapshotMeta {
         if !compare_option(&self.checksum, &other.checksum) {
             return true;
         }
+        if self.flags.force || other.flags.force {
+            return true;
+        }
         false
+    }
+}
+
+impl Metadata for SnapshotMeta {
+    fn priority(&self) -> isize {
+        if self.flags.force_last {
+            -1
+        } else {
+            0
+        }
     }
 }
