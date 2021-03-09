@@ -35,7 +35,7 @@ impl SnapshotStorage<SnapshotPath> for Rustup {
         let matcher = Regex::new(r#"url = "(.*)""#).unwrap();
 
         let mut targets = vec![];
-        for day_back in 1..self.days_to_retain {
+        for day_back in 0..self.days_to_retain {
             let now = Utc::now();
             let day = day_earlier(now, day_back as i64).unwrap();
             let day_string = day.format("%Y-%m-%d");

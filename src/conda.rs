@@ -1,6 +1,6 @@
 use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
-use crate::metadata::{SnapshotMeta, SnapshotMetaFlag};
+use crate::metadata::SnapshotMeta;
 use crate::traits::{SnapshotStorage, SourceStorage};
 
 use async_trait::async_trait;
