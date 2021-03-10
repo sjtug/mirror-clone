@@ -7,6 +7,9 @@ use futures_util::{stream, StreamExt, TryStreamExt};
 use regex::Regex;
 use slog::{info, warn};
 
+/// Rustup source provides a file list of recent rustup toolchains.
+/// It is recommended to use it with `--no-delete` flag. This source
+/// yields path snapshots.
 #[derive(Debug)]
 pub struct Rustup {
     pub base: String,

@@ -21,8 +21,14 @@ pub struct CondaRepos {
     pub repos: Vec<String>,
 }
 
+/// Conda is a source storage that scans an conda repository.
+/// This source yields a snapshot with size and checksum metadata.
+/// To ensure consistency, repository data is always transferred
+/// at the end. This is done by setting priority in snapshot metadata.
 pub struct Conda {
+    /// conda config path
     config: CondaConfig,
+    /// parsed conda repos
     repos: CondaRepos,
 }
 

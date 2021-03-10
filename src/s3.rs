@@ -33,6 +33,11 @@ impl S3Config {
     }
 }
 
+/// S3 backend is a target storage, which enables taking snapshot of an S3
+/// storage, and uploading objects to it. For snapshot, this storage by default
+/// only has size and path. We could enable modify time and other metadata
+/// in snapshot later. This storage only accepts `ByteStream`.
+///
 /// This backend has only been tested with SJTU S3 service, which is
 /// (possibly) set up with Ceph. Unlike official S3 protocol, SJTU
 /// S3 service supports special characters in key. For example, if
