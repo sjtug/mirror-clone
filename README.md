@@ -2,9 +2,13 @@
 
 An all-in-one mirror utility.
 
-For more information about our mirror service, refer to https://github.com/sjtug/mirror-docker-unified/wiki
-
+For more information about our mirror service, refer to
+[https://github.com/sjtug/mirror-docker-unified/wiki](https://github.com/sjtug/mirror-docker-unified/wiki)
 For legacy version, refer to legacy branch.
+
+mirror-clone is originally built for setting up a mirror repo on SJTU S3 service, and now being made
+into an all-in-one mirror tool. The most notable feature of mirror-clone is to synchronize files from
+Rsync endpoint to S3.
 
 ## Design
 
@@ -42,7 +46,14 @@ Refer to source code for more information.
 
 * mirror-intel, sends HEAD request to [mirror-intel](https://github.com/sjtug/mirror-intel) endpoint, so as to fill the mirror-intel cache.
 * S3
+* File system
 
 ## Commands
 
-Use `./mirror-intel --help` to view current commands and their meaning.
+Use `./mirror-clone --help` to view current commands and their meaning.
+
+## Future Works
+
+* More pipes. For example, rewrite pipe, snapshot cache pipe, etc.
+* More sources.
+* More transfers.

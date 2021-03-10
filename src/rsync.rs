@@ -13,14 +13,30 @@ use structopt::StructOpt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
+/// Rsync endpoint helps synchronize files on rsync daemon to other targets.
+/// This is done by first running rsync program to get a file list, then
+/// downlaod them over HTTP. Currently, symbolic links are not supported.
+///
+/// Rsync snapshot provides a snapshot with metadata, which includes path, size,
+/// and file modified time.
+///
+/// Note that we do not ensure consistency between Rsync snapshot and HTTP downloads.
+/// Some servers serve different files under Rsync and HTTP. For example, mirrors.tuna
+/// has two servers, and HTTP contents may be not exactly the same as rsync. Users
+/// must ensure what's served on HTTP is really what's inside rsync.
 #[derive(Debug, StructOpt)]
 pub struct Rsync {
+    /// Rsync endpoint
     #[structopt(long, help = "Base of Rsync")]
     pub rsync_base: String,
+    /// Corresponding HTTP endpoint
     #[structopt(long, help = "Base of HTTP")]
     pub http_base: String,
+    /// When debug mode is enabled, we only scan first 1000 objects. Be sure
+    /// to add `--no-delete` parameter to simple diff transfer when this is enabled.
     #[structopt(long, help = "Debug mode")]
     pub debug: bool,
+    /// Prefix to ignore. If this is an empty string, all objects are transferred.
     #[structopt(long, help = "Prefix to ignore", default_value = "")]
     pub ignore_prefix: String,
 }
