@@ -1,3 +1,8 @@
+//! Homebrew source
+//!
+//! Homebrew source will use brew.sh API to fetch all available bottles.
+//! It will generate a list of URLs.
+
 use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
 use crate::error::Result;
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};

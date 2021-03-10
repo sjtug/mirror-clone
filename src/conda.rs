@@ -1,3 +1,10 @@
+//! Conda source
+//!
+//! Conda is a source storage that scans an conda repository.
+//! This source yields a snapshot with size and checksum metadata.
+//! To ensure consistency, repository data is always transferred
+//! at the end. This is done by setting priority in snapshot metadata.
+
 use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
 use crate::metadata::SnapshotMeta;
@@ -21,10 +28,6 @@ pub struct CondaRepos {
     pub repos: Vec<String>,
 }
 
-/// Conda is a source storage that scans an conda repository.
-/// This source yields a snapshot with size and checksum metadata.
-/// To ensure consistency, repository data is always transferred
-/// at the end. This is done by setting priority in snapshot metadata.
 pub struct Conda {
     /// conda config path
     config: CondaConfig,

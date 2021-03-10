@@ -1,3 +1,17 @@
+//! S3 backend
+//!
+//! S3 backend is a target storage, which enables taking snapshot of an S3
+//! storage, and uploading objects to it. For snapshot, this storage by default
+//! only has size and path. We could enable modify time and other metadata
+//! in snapshot later. This storage only accepts `ByteStream`.
+//!
+//! This backend has only been tested with SJTU S3 service, which is
+//! (possibly) set up with Ceph. Unlike official S3 protocol, SJTU
+//! S3 service supports special characters in key. For example, if
+//! we put `go@1.10-1.10.8.catalina.bottle.2.tar.gz` into SJTU S3,
+//! the `@` character won't be ignored. You may access it either at
+//! `go@...` or `go%40...` on HTTP.
+
 use std::{collections::HashMap, sync::atomic::AtomicU64};
 
 use crate::common::{Mission, SnapshotConfig, SnapshotPath};
@@ -33,17 +47,6 @@ impl S3Config {
     }
 }
 
-/// S3 backend is a target storage, which enables taking snapshot of an S3
-/// storage, and uploading objects to it. For snapshot, this storage by default
-/// only has size and path. We could enable modify time and other metadata
-/// in snapshot later. This storage only accepts `ByteStream`.
-///
-/// This backend has only been tested with SJTU S3 service, which is
-/// (possibly) set up with Ceph. Unlike official S3 protocol, SJTU
-/// S3 service supports special characters in key. For example, if
-/// we put `go@1.10-1.10.8.catalina.bottle.2.tar.gz` into SJTU S3,
-/// the `@` character won't be ignored. You may access it either at
-/// `go@...` or `go%40...` on HTTP.
 pub struct S3Backend {
     config: S3Config,
     client: S3Client,

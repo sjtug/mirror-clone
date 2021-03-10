@@ -1,3 +1,8 @@
+//! crates.io Source
+//!
+//! Crates.io source first download current crates.io-index zip from GitHub,
+//! and then extract downloadable crates from crates.io-index in memory.
+
 use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, SourceStorage};
