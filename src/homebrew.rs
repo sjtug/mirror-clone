@@ -53,13 +53,13 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
         info!(logger, "parsing...");
         let json: Value = serde_json::from_str(&data).unwrap();
         let packages = json.as_array().unwrap();
-        let bottles_base = if self.bottles_base.ends_with("/") {
+        let bottles_base = if self.bottles_base.ends_with('/') {
             self.bottles_base.clone()
         } else {
             format!("{}/", self.bottles_base)
         };
         let snapshot: Vec<String> = packages
-            .into_iter()
+            .iter()
             .filter_map(|package| package.as_object())
             .filter_map(|package| {
                 progress.set_message(

@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 
-static LIST_URL: &'static str = "mirror_clone_list.html";
+static LIST_URL: &str = "mirror_clone_list.html";
 pub struct IndexPipe<Source> {
     source: Source,
     index: Index,
@@ -40,7 +40,7 @@ impl Index {
             Some((parent, rest)) => {
                 self.prefixes
                     .entry(parent.to_string())
-                    .or_insert(Index::new())
+                    .or_insert_with(Index::new)
                     .insert(rest);
             }
             None => {
@@ -93,13 +93,13 @@ impl Index {
     }
 
     fn index_for(&self, prefix: &str, breadcrumb: &[&str], list_key: &str) -> String {
-        if prefix == "" {
+        if prefix.is_empty() {
             let mut data = String::new();
 
             let title = breadcrumb
                 .last()
                 .map(|x| html_escape::encode_text(x).to_string())
-                .unwrap_or("Root".to_string());
+                .unwrap_or_else(|| String::from("Root"));
             let navbar = self.generate_navbar(breadcrumb, list_key);
 
             data += &format!(r#"<tr><td><a href="../{}">..</a></td></tr>"#, list_key);
@@ -161,17 +161,15 @@ impl Index {
                 data,
                 chrono::Utc::now().to_rfc2822()
             )
+        } else if let Some((parent, rest)) = prefix.split_once('/') {
+            let mut breadcrumb = breadcrumb.to_vec();
+            breadcrumb.push(parent);
+            self.prefixes
+                .get(parent)
+                .unwrap()
+                .index_for(rest, &breadcrumb, list_key)
         } else {
-            if let Some((parent, rest)) = prefix.split_once('/') {
-                let mut breadcrumb = breadcrumb.to_vec();
-                breadcrumb.push(parent);
-                self.prefixes
-                    .get(parent)
-                    .unwrap()
-                    .index_for(rest, &breadcrumb, list_key)
-            } else {
-                panic!("unsupported prefix {}", prefix);
-            }
+            panic!("unsupported prefix {}", prefix);
         }
     }
 }
@@ -217,7 +215,7 @@ where
         let mut snapshot = self.source.snapshot(mission, config).await?;
         let index_keys =
             self.snapshot_index_keys(snapshot.iter().map(|x| x.key().to_owned()).collect());
-        snapshot.extend(index_keys.into_iter().map(|x| SnapshotPath(x)));
+        snapshot.extend(index_keys.into_iter().map(SnapshotPath));
         Ok(snapshot)
     }
 
@@ -239,7 +237,7 @@ where
         let mut snapshot = self.source.snapshot(mission, config).await?;
         let index_keys =
             self.snapshot_index_keys(snapshot.iter().map(|x| x.key().to_owned()).collect());
-        snapshot.extend(index_keys.into_iter().map(|x| SnapshotMeta::force(x)));
+        snapshot.extend(index_keys.into_iter().map(SnapshotMeta::force));
         Ok(snapshot)
     }
 
@@ -256,14 +254,10 @@ where
 {
     async fn get_object(&self, snapshot: &Snapshot, mission: &Mission) -> Result<ByteStream> {
         let key = snapshot.key();
-        if key.ends_with(LIST_URL) {
+        if let Some(prefix) = key.strip_suffix(LIST_URL) {
             let content = self
                 .index
-                .index_for(
-                    &key[..key.len() - LIST_URL.len()],
-                    &[&self.base_path],
-                    LIST_URL,
-                )
+                .index_for(prefix, &[&self.base_path], LIST_URL)
                 .into_bytes();
             let pipe_file = format!("{}.{}.buffer", hash_string(key), unix_time());
             let path = Path::new(&self.buffer_path).join(pipe_file);
@@ -283,7 +277,7 @@ where
             Ok(ByteStream {
                 object: ByteObject::LocalFile {
                     file: Some(f),
-                    path: Some(path.into()),
+                    path: Some(path),
                 },
                 length: content.len() as u64,
                 modified_at: unix_time(),

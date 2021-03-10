@@ -26,7 +26,7 @@ pub fn bar() -> ProgressStyle {
 }
 
 pub fn snapshot_string_to_path(snapshot: Vec<String>) -> Vec<SnapshotPath> {
-    snapshot.into_iter().map(|x| SnapshotPath(x)).collect()
+    snapshot.into_iter().map(SnapshotPath).collect()
 }
 
 pub fn user_agent() -> String {
@@ -39,24 +39,24 @@ pub fn user_agent() -> String {
 
 pub fn generate_s3_url_encode_map() -> Vec<(&'static str, &'static str)> {
     // reference: https://github.com/GeorgePhillips/node-s3-url-encode/blob/master/index.js
-    let mut map = vec![];
-    map.push(("+", "%2B"));
-    map.push(("!", "%21"));
-    map.push(("\"", "%22"));
-    map.push(("#", "%23"));
-    map.push(("$", "%24"));
-    map.push(("&", "%26"));
-    map.push(("'", "%27"));
-    map.push(("(", "%28"));
-    map.push((")", "%29"));
-    map.push(("*", "%2A"));
-    map.push((",", "%2C"));
-    map.push((":", "%3A"));
-    map.push((";", "%3B"));
-    map.push(("=", "%3D"));
-    map.push(("?", "%3F"));
-    map.push(("@", "%40"));
-    map
+    vec![
+        ("+", "%2B"),
+        ("!", "%21"),
+        ("\"", "%22"),
+        ("#", "%23"),
+        ("$", "%24"),
+        ("&", "%26"),
+        ("'", "%27"),
+        ("(", "%28"),
+        (")", "%29"),
+        ("*", "%2A"),
+        (",", "%2C"),
+        (":", "%3A"),
+        (";", "%3B"),
+        ("=", "%3D"),
+        ("?", "%3F"),
+        ("@", "%40"),
+    ]
 }
 
 pub fn generate_s3_url_reverse_encode_map() -> Vec<(&'static str, &'static str)> {

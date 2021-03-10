@@ -42,7 +42,7 @@ impl SnapshotStorage<SnapshotPath> for Gradle {
         let json: Value = serde_json::from_str(&data).unwrap();
         let packages = json.as_array().unwrap();
         let snapshot: Vec<String> = packages
-            .into_iter()
+            .iter()
             .filter_map(|package| package.as_object())
             .filter_map(|package| {
                 progress.set_message(
@@ -53,7 +53,7 @@ impl SnapshotStorage<SnapshotPath> for Gradle {
                 );
                 if let Some(rc_for) = package.get("rcFor") {
                     if let Some(rc_for) = rc_for.as_str() {
-                        if rc_for != "" {
+                        if !rc_for.is_empty() {
                             return None;
                         }
                     }

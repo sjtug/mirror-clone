@@ -85,7 +85,7 @@ impl SnapshotStorage<SnapshotPath> for Dart {
                     let data: Value = serde_json::from_str(&package).unwrap();
                     let versions = data.get("versions").unwrap().as_array().unwrap();
                     let archives: Vec<String> = versions
-                        .into_iter()
+                        .iter()
                         .filter_map(|version| version.get("archive_url"))
                         .filter_map(|archive_url| archive_url.as_str())
                         .map(|archive_url| archive_url.replace(&base, ""))

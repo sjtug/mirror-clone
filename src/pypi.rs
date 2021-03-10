@@ -117,7 +117,7 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
             .try_collect()
             .await;
 
-        let package_base = if self.package_base.ends_with("/") {
+        let package_base = if self.package_base.ends_with('/') {
             self.package_base.clone()
         } else {
             format!("{}/", self.package_base)
