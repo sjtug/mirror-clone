@@ -1,3 +1,17 @@
+//! Rsync source
+//!
+//! Rsync endpoint helps synchronize files on rsync daemon to other targets.
+//! This is done by first running rsync program to get a file list, then
+//! downlaod them over HTTP. Currently, symbolic links are not supported.
+//!
+//! Rsync snapshot provides a snapshot with metadata, which includes path, size,
+//! and file modified time.
+//!
+//! Note that we do not ensure consistency between Rsync snapshot and HTTP downloads.
+//! Some servers serve different files under Rsync and HTTP. For example, mirrors.tuna
+//! has two servers, and HTTP contents may be not exactly the same as rsync. Users
+//! must ensure what's served on HTTP is really what's inside rsync.
+
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, SourceStorage};
 
@@ -13,17 +27,6 @@ use structopt::StructOpt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-/// Rsync endpoint helps synchronize files on rsync daemon to other targets.
-/// This is done by first running rsync program to get a file list, then
-/// downlaod them over HTTP. Currently, symbolic links are not supported.
-///
-/// Rsync snapshot provides a snapshot with metadata, which includes path, size,
-/// and file modified time.
-///
-/// Note that we do not ensure consistency between Rsync snapshot and HTTP downloads.
-/// Some servers serve different files under Rsync and HTTP. For example, mirrors.tuna
-/// has two servers, and HTTP contents may be not exactly the same as rsync. Users
-/// must ensure what's served on HTTP is really what's inside rsync.
 #[derive(Debug, StructOpt)]
 pub struct Rsync {
     /// Rsync endpoint

@@ -1,3 +1,20 @@
+//! Simple Diff Transfer
+//!
+//! Simple Diff Transfer simply takes snapshots of source and target,
+//! compare them, and generate a transfer plan. The plan is constructed
+//! as follows:
+//!
+//! 1. Snapshot object not in source but in target, delete
+//! 2. Snapshot object not in target but in source, add
+//! 3. Snapshot object in both source and target but different, update
+//!
+//! Then, it will concurrently transfer the objects between two endpoints.
+//! The snapshot object should support `Metadata` trait, and simple diff
+//! transfer will transfer them from highest priority to lowest priority.
+//!
+//! If transfer of an object fails, it will be simply ignored. We could
+//! later implement some kind of retry logic.
+
 use futures_util::{stream, StreamExt};
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::ClientBuilder;

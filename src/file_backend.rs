@@ -1,3 +1,11 @@
+//! Local filesystem backend
+//!
+//! File backend is a target storage. This enables taking a snapshot of a
+//! local file system, and transferring data to a local folder. Note that
+//! this backend currently cannot handle metadatas.
+//!
+//! File backend snapshots only contain paths, and only accepts ByteStream.
+
 use crate::error::{Error, Result};
 use crate::stream_pipe::ByteStream;
 use crate::traits::{Key, SnapshotStorage, TargetStorage};
@@ -11,11 +19,6 @@ use slog::info;
 use structopt::StructOpt;
 use walkdir::WalkDir;
 
-/// File backend is a target storage. This enables taking a snapshot of a
-/// local file system, and transferring data to a local folder. Note that
-/// this backend currently cannot handle metadatas.
-///
-/// File backend snapshots only contain paths, and only accepts ByteStream.
 #[derive(StructOpt, Debug)]
 pub struct FileBackend {
     #[structopt(long)]

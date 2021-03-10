@@ -1,3 +1,8 @@
+//! GitHub Release source
+//!
+//! GitHubRelease source will fetch the GitHub API when taking snapshots.
+//! Then, it will construct a list of downloadable URLs.
+
 use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::Result;
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};

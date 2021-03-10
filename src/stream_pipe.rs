@@ -1,3 +1,13 @@
+//! ByteStreamPipe pipes TransferURL to ByteObject.
+//!
+//! A `ByteStreamPipe` is a wrapper on sources which yields `TransferURL`.
+//! After piping a source through `ByteStreamPipe`, it will become a source
+//! storage which yields `ByteStream`.
+//!
+//! Currently, this is done by downloading files to local file system,
+//! provide it to target storage, and delete it on dropping file object.
+//! We may later refactor it to use in-memory stream or direct reqwest stream.
+
 use async_trait::async_trait;
 use chrono::DateTime;
 
@@ -62,13 +72,6 @@ pub struct ByteStream {
     pub modified_at: u64,
 }
 
-/// A `ByteStreamPipe` is a wrapper on sources which yields `TransferURL`.
-/// After piping a source through `ByteStreamPipe`, it will become a source
-/// storage which yields `ByteStream`.
-///
-/// Currently, this is done by downloading files to local file system,
-/// provide it to target storage, and delete it on dropping file object.
-/// We may later refactor it to use in-memory stream or direct reqwest stream.
 pub struct ByteStreamPipe<Source: std::fmt::Debug> {
     pub source: Source,
     pub buffer_path: String,

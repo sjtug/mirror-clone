@@ -1,3 +1,14 @@
+//! MirrorIntel backend
+//!
+//! MirrorIntel backend interacts with mirror-intel. This backend will
+//! yield an empty snapshot. When using with simple diff transfer, all
+//! objects will be fed into MirrorIntel backend. Given a source URL,
+//! this backend will send HEAD request to corresponding mirror-intel
+//! endpoint. Therefore, if the object exists in S3 backend, mirror-intel
+//! will just ignore this request. Otherwise, the object will be downloaded
+//! in the background by mirror-intel, and this backend will acknowledge its
+//! absence and slow down sending HEAD.
+
 use crate::error::{Error, Result};
 use crate::traits::{Key, SnapshotStorage, TargetStorage};
 use crate::{
@@ -13,14 +24,6 @@ pub struct MirrorIntelConfig {
     base: String,
 }
 
-/// MirrorIntel backend interacts with mirror-intel. This backend will
-/// yield an empty snapshot. When using with simple diff transfer, all
-/// objects will be fed into MirrorIntel backend. Given a source URL,
-/// this backend will send HEAD request to corresponding mirror-intel
-/// endpoint. Therefore, if the object exists in S3 backend, mirror-intel
-/// will just ignore this request. Otherwise, the object will be downloaded
-/// in the background by mirror-intel, and this backend will acknowledge its
-/// absence and slow down sending HEAD.
 pub struct MirrorIntel {
     config: MirrorIntelConfig,
     client: Client,
