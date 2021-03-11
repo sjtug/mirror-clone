@@ -193,7 +193,7 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
     }
 
     fn info(&self) -> String {
-        format!("s3 with meta, {:?}", self.config)
+        format!("s3 (meta), {:?}", self.config)
     }
 }
 
@@ -214,7 +214,7 @@ impl SnapshotStorage<SnapshotPath> for S3Backend {
     }
 
     fn info(&self) -> String {
-        format!("s3, {:?}", self.config)
+        format!("s3 (path), {:?}", self.config)
     }
 }
 pub trait S3Metadata {
