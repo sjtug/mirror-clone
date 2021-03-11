@@ -100,4 +100,8 @@ impl Metadata for SnapshotMeta {
             0
         }
     }
+
+    fn last_modified(&self) -> Option<u64> {
+        self.last_modified
+    }
 }
