@@ -47,6 +47,10 @@ pub trait Metadata {
     fn priority(&self) -> isize {
         0
     }
+
+    fn last_modified(&self) -> Option<u64> {
+        None
+    }
 }
 
 pub trait Diff {

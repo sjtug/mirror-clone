@@ -98,7 +98,7 @@ impl SnapshotStorage<SnapshotMeta> for Rsync {
             progress.inc(1);
             idx += 1;
             if self.debug && idx > 1000 {
-                break;
+                continue;
             }
 
             if let Ok((permission, size, date, time, file)) = parse_rsync_output(&line) {

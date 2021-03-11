@@ -1,20 +1,19 @@
 //! Local filesystem backend
 //!
 //! File backend is a target storage. This enables taking a snapshot of a
-//! local file system, and transferring data to a local folder. Note that
-//! this backend currently cannot handle metadatas.
+//! local file system, and transferring data to a local folder.
 //!
-//! File backend snapshots only contain paths, and only accepts ByteStream.
+//! File backend snapshots contains metadata (size + last modified).
+//! It only accepts ByteStream.
 
+use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::{Error, Result};
+use crate::metadata::SnapshotMeta;
 use crate::stream_pipe::ByteStream;
-use crate::traits::{Key, SnapshotStorage, TargetStorage};
-use crate::{
-    common::{Mission, SnapshotConfig, SnapshotPath},
-    metadata::SnapshotMeta,
-};
+use crate::traits::{Key, Metadata, SnapshotStorage, TargetStorage};
 
 use async_trait::async_trait;
+use filetime::FileTime;
 use slog::info;
 use structopt::StructOpt;
 use walkdir::WalkDir;
@@ -32,12 +31,12 @@ impl FileBackend {
 }
 
 #[async_trait]
-impl SnapshotStorage<SnapshotPath> for FileBackend {
+impl SnapshotStorage<SnapshotMeta> for FileBackend {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<SnapshotPath>> {
+    ) -> Result<Vec<SnapshotMeta>> {
         let logger = mission.logger;
         let progress = mission.progress;
 
@@ -51,12 +50,23 @@ impl SnapshotStorage<SnapshotPath> for FileBackend {
                 let entry = entry.map_err(|err| {
                     Error::StorageError(format!("error while scanning file: {:?}", err))
                 })?;
-                let path = entry.into_path();
+                let path = entry.path().to_path_buf();
                 if path.is_file() {
                     let path = path.strip_prefix(&base_path).unwrap();
                     let path = path.to_str().unwrap().to_string();
+                    let metadata = entry.metadata().map_err(|err| {
+                        Error::StorageError(format!("file backend fails to get metadata {:?}", err))
+                    })?;
+
+                    let mtime = FileTime::from_last_modification_time(&metadata);
+
                     progress.set_message(&path);
-                    snapshot.push(SnapshotPath(path));
+                    snapshot.push(SnapshotMeta {
+                        key: path,
+                        size: Some(metadata.len()),
+                        last_modified: Some(mtime.unix_seconds() as u64),
+                        ..Default::default()
+                    });
                 }
             }
             Ok::<_, Error>(snapshot)
@@ -66,12 +76,12 @@ impl SnapshotStorage<SnapshotPath> for FileBackend {
     }
 
     fn info(&self) -> String {
-        format!("file, {:?}", self)
+        format!("file (meta), {:?}", self)
     }
 }
 
 #[async_trait]
-impl<Snapshot: Key> TargetStorage<Snapshot, ByteStream> for FileBackend {
+impl<Snapshot: Key + Metadata> TargetStorage<Snapshot, ByteStream> for FileBackend {
     async fn put_object(
         &self,
         snapshot: &Snapshot,
@@ -82,7 +92,10 @@ impl<Snapshot: Key> TargetStorage<Snapshot, ByteStream> for FileBackend {
         let target: std::path::PathBuf = format!("{}/{}", self.base_path, snapshot.key()).into();
         let parent = target.parent().unwrap();
         tokio::fs::create_dir_all(parent).await?;
-        tokio::fs::rename(path, target).await?;
+        tokio::fs::rename(&path, &target).await?;
+        if let Some(last_modified) = snapshot.last_modified() {
+            filetime::set_file_mtime(&target, FileTime::from_unix_time(last_modified as i64, 0))?;
+        }
         Ok(())
     }
 
@@ -94,16 +107,22 @@ impl<Snapshot: Key> TargetStorage<Snapshot, ByteStream> for FileBackend {
 }
 
 #[async_trait]
-impl SnapshotStorage<SnapshotMeta> for FileBackend {
+impl SnapshotStorage<SnapshotPath> for FileBackend {
     async fn snapshot(
         &mut self,
-        _mission: Mission,
-        _config: &SnapshotConfig,
-    ) -> Result<Vec<SnapshotMeta>> {
-        panic!("not supported");
+        mission: Mission,
+        config: &SnapshotConfig,
+    ) -> Result<Vec<SnapshotPath>> {
+        Ok(
+            <Self as SnapshotStorage<SnapshotMeta>>::snapshot(self, mission, config)
+                .await?
+                .into_iter()
+                .map(|x| SnapshotPath(x.key))
+                .collect(),
+        )
     }
 
     fn info(&self) -> String {
-        format!("file, {:?}", self)
+        format!("file (path), {:?}", self)
     }
 }
