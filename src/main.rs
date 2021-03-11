@@ -8,6 +8,7 @@ mod github_release;
 mod gradle;
 mod homebrew;
 mod html_scanner;
+mod index_pipe;
 mod metadata;
 mod mirror_intel;
 mod opts;
@@ -38,19 +39,23 @@ macro_rules! transfer {
                 transfer.transfer().await.unwrap();
             }
             Target::S3 => {
+                let buffer_path = $opts.s3_config.s3_buffer_path.clone().unwrap();
                 let source = stream_pipe::ByteStreamPipe {
                     source: $source,
-                    buffer_path: $opts.s3_config.s3_buffer_path.clone().unwrap(),
+                    buffer_path: buffer_path.clone(),
                 };
+                let source = index_pipe::IndexPipe::new(source, buffer_path);
                 let target: S3Backend = $opts.s3_config.into();
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
                 transfer.transfer().await.unwrap();
             }
             Target::File => {
+                let buffer_path = $opts.file_config.file_buffer_path.clone().unwrap();
                 let source = stream_pipe::ByteStreamPipe {
                     source: $source,
-                    buffer_path: $opts.file_config.file_buffer_path.clone().unwrap(),
+                    buffer_path: buffer_path.clone(),
                 };
+                let source = index_pipe::IndexPipe::new(source, buffer_path);
                 let target: FileBackend = $opts.file_config.into();
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
                 transfer.transfer().await.unwrap();
