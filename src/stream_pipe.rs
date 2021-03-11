@@ -14,6 +14,7 @@ use chrono::DateTime;
 use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
 use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::utils::{hash_string, unix_time};
 use futures_core::Stream;
 use futures_util::{StreamExt, TryStreamExt};
 use slog::debug;
@@ -72,7 +73,7 @@ pub struct ByteStream {
     pub modified_at: u64,
 }
 
-pub struct ByteStreamPipe<Source: std::fmt::Debug> {
+pub struct ByteStreamPipe<Source> {
     pub source: Source,
     pub buffer_path: String,
 }
@@ -81,7 +82,7 @@ pub struct ByteStreamPipe<Source: std::fmt::Debug> {
 impl<Snapshot, Source> SnapshotStorage<Snapshot> for ByteStreamPipe<Source>
 where
     Snapshot: Send + 'static,
-    Source: SnapshotStorage<Snapshot> + std::fmt::Debug + Send,
+    Source: SnapshotStorage<Snapshot> + Send,
 {
     async fn snapshot(
         &mut self,
@@ -93,32 +94,18 @@ where
 
     fn info(&self) -> String {
         format!(
-            "StreamPipe buffered to {} <{:?}>",
-            self.buffer_path, self.source
+            "StreamPipe buffered to {} <{}>",
+            self.buffer_path,
+            self.source.info()
         )
     }
-}
-
-fn unix_time() -> u64 {
-    let start = std::time::SystemTime::now();
-    start
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_secs()
-}
-
-fn hash_string(key: &str) -> String {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    key.hash(&mut hasher);
-    format!("{:x}", hasher.finish())
 }
 
 #[async_trait]
 impl<Snapshot, Source> SourceStorage<Snapshot, ByteStream> for ByteStreamPipe<Source>
 where
     Snapshot: Send + Sync + 'static,
-    Source: SourceStorage<Snapshot, TransferURL> + std::fmt::Debug,
+    Source: SourceStorage<Snapshot, TransferURL>,
 {
     async fn get_object(&self, snapshot: &Snapshot, mission: &Mission) -> Result<ByteStream> {
         let transfer_url = self.source.get_object(snapshot, mission).await?;

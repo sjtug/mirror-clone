@@ -1,19 +1,26 @@
 //! IndexPipe adds Index to every directory of source.
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::Result;
 use crate::metadata::SnapshotMeta;
-use crate::stream_pipe::ByteStream;
+use crate::stream_pipe::{ByteObject, ByteStream};
 use crate::traits::{Key, SnapshotStorage, SourceStorage};
-use async_trait::async_trait;
-use std::collections::{BTreeMap, BTreeSet};
+use crate::utils::{hash_string, unix_time};
 
-static LIST_URL: &'static str = "mirror_intel_list.html";
+use async_trait::async_trait;
+use itertools::Itertools;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
+use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
+
+static LIST_URL: &'static str = "mirror_clone_list.html";
 pub struct IndexPipe<Source> {
     source: Source,
     index: Index,
+    buffer_path: String,
 }
 
+#[derive(Debug)]
 pub struct Index {
     prefixes: BTreeMap<String, Index>,
     objects: BTreeSet<String>,
@@ -50,6 +57,50 @@ impl Index {
         }
         result
     }
+
+    fn index_for(&self, prefix: &str, current_directory: &str, list_key: &str) -> String {
+        if prefix == "" {
+            let mut data = String::new();
+            // TODO: need escape HTML and URL
+            data += &format!("<p>{}</p>", html_escape::encode_text(current_directory));
+            data += &self
+                .prefixes
+                .iter()
+                .map(|(key, _)| {
+                    format!(
+                        r#"<a href="{}/{}">{}/</a>"#,
+                        urlencoding::encode(key),
+                        list_key,
+                        html_escape::encode_text(key)
+                    )
+                })
+                .collect_vec()
+                .join("\n<br>\n");
+            data += "\n<br>\n";
+            data += &self
+                .objects
+                .iter()
+                .map(|key| {
+                    format!(
+                        r#"<a href="{}">{}</a>"#,
+                        urlencoding::encode(key),
+                        html_escape::encode_text(key)
+                    )
+                })
+                .collect_vec()
+                .join("\n<br>\n");
+            data
+        } else {
+            if let Some((parent, rest)) = prefix.split_once('/') {
+                self.prefixes
+                    .get(parent)
+                    .unwrap()
+                    .index_for(rest, parent, list_key)
+            } else {
+                panic!("unsupported prefix {}", prefix);
+            }
+        }
+    }
 }
 
 fn generate_index(objects: &[String]) -> Index {
@@ -61,6 +112,14 @@ fn generate_index(objects: &[String]) -> Index {
 }
 
 impl<Source> IndexPipe<Source> {
+    pub fn new(source: Source, buffer_path: String) -> Self {
+        Self {
+            source,
+            index: Index::new(),
+            buffer_path,
+        }
+    }
+
     fn snapshot_index_keys(&mut self, mut snapshot: Vec<String>) -> Vec<String> {
         snapshot.sort();
         // If duplicated keys are found, there should be a warning.
@@ -74,7 +133,7 @@ impl<Source> IndexPipe<Source> {
 #[async_trait]
 impl<Source> SnapshotStorage<SnapshotPath> for IndexPipe<Source>
 where
-    Source: SnapshotStorage<SnapshotPath> + std::fmt::Debug,
+    Source: SnapshotStorage<SnapshotPath>,
 {
     async fn snapshot(
         &mut self,
@@ -89,14 +148,14 @@ where
     }
 
     fn info(&self) -> String {
-        format!("IndexPipe (path) <{:?}>", self.source)
+        format!("IndexPipe (path) <{}>", self.source.info())
     }
 }
 
 #[async_trait]
 impl<Source> SnapshotStorage<SnapshotMeta> for IndexPipe<Source>
 where
-    Source: SnapshotStorage<SnapshotMeta> + std::fmt::Debug,
+    Source: SnapshotStorage<SnapshotMeta>,
 {
     async fn snapshot(
         &mut self,
@@ -111,18 +170,46 @@ where
     }
 
     fn info(&self) -> String {
-        format!("IndexPipe (meta) <{:?}>", self.source)
+        format!("IndexPipe (meta) <{}>", self.source.info())
     }
 }
+
 #[async_trait]
 impl<Snapshot, Source> SourceStorage<Snapshot, ByteStream> for IndexPipe<Source>
 where
     Snapshot: Key,
-    Source: SourceStorage<Snapshot, ByteStream> + std::fmt::Debug,
+    Source: SourceStorage<Snapshot, ByteStream>,
 {
     async fn get_object(&self, snapshot: &Snapshot, mission: &Mission) -> Result<ByteStream> {
-        if snapshot.key().ends_with(LIST_URL) {
-            todo!();
+        let key = snapshot.key();
+        if key.ends_with(LIST_URL) {
+            let content = self
+                .index
+                .index_for(&key[..key.len() - LIST_URL.len()], "", LIST_URL)
+                .into_bytes();
+            let pipe_file = format!("{}.{}.buffer", hash_string(key), unix_time());
+            let path = Path::new(&self.buffer_path).join(pipe_file);
+            let mut f = BufWriter::new(
+                tokio::fs::OpenOptions::default()
+                    .create(true)
+                    .truncate(true)
+                    .write(true)
+                    .read(true)
+                    .open(&path)
+                    .await?,
+            );
+            f.write_all(&content).await?;
+            f.flush().await?;
+            let mut f = f.into_inner();
+            f.seek(std::io::SeekFrom::Start(0)).await?;
+            Ok(ByteStream {
+                object: ByteObject::LocalFile {
+                    file: Some(f),
+                    path: Some(path.into()),
+                },
+                length: content.len() as u64,
+                modified_at: unix_time(),
+            })
         } else {
             self.source.get_object(snapshot, mission).await
         }

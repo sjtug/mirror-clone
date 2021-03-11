@@ -82,3 +82,18 @@ pub fn rewrite_snapshot(target_snapshot: &mut [SnapshotPath]) {
         path.0 = rewrite_url_string(&gen_map, &path.0);
     }
 }
+
+pub fn hash_string(key: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    key.hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
+pub fn unix_time() -> u64 {
+    let start = std::time::SystemTime::now();
+    start
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs()
+}
