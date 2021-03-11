@@ -1,4 +1,4 @@
-//! ByteStreamPipe pipes TransferURL to ByteObject.
+//! ByteStreamPipe pipes TransferURL to ByteObject
 //!
 //! A `ByteStreamPipe` is a wrapper on sources which yields `TransferURL`.
 //! After piping a source through `ByteStreamPipe`, it will become a source
@@ -93,8 +93,8 @@ where
 
     fn info(&self) -> String {
         format!(
-            "pipe <{:?}> to bytestream, buffered to {}",
-            self.source, self.buffer_path
+            "StreamPipe buffered to {} <{:?}>",
+            self.buffer_path, self.source
         )
     }
 }
@@ -118,7 +118,7 @@ fn hash_string(key: &str) -> String {
 impl<Snapshot, Source> SourceStorage<Snapshot, ByteStream> for ByteStreamPipe<Source>
 where
     Snapshot: Send + Sync + 'static,
-    Source: SourceStorage<Snapshot, TransferURL> + std::fmt::Debug + Send + Sync,
+    Source: SourceStorage<Snapshot, TransferURL> + std::fmt::Debug,
 {
     async fn get_object(&self, snapshot: &Snapshot, mission: &Mission) -> Result<ByteStream> {
         let transfer_url = self.source.get_object(snapshot, mission).await?;

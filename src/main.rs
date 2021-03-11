@@ -8,6 +8,7 @@ mod github_release;
 mod gradle;
 mod homebrew;
 mod html_scanner;
+mod index_pipe;
 mod metadata;
 mod mirror_intel;
 mod opts;

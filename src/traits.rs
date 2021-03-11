@@ -3,7 +3,7 @@ use crate::error::Result;
 use async_trait::async_trait;
 
 #[async_trait]
-pub trait SnapshotStorage<SnapshotItem> {
+pub trait SnapshotStorage<SnapshotItem>: Send + Sync + 'static {
     async fn snapshot(
         &mut self,
         mission: Mission,
@@ -13,12 +13,12 @@ pub trait SnapshotStorage<SnapshotItem> {
 }
 
 #[async_trait]
-pub trait SourceStorage<SnapshotItem, SourceItem> {
+pub trait SourceStorage<SnapshotItem, SourceItem>: Send + Sync + 'static {
     async fn get_object(&self, snapshot: &SnapshotItem, mission: &Mission) -> Result<SourceItem>;
 }
 
 #[async_trait]
-pub trait TargetStorage<SnapshotItem, TargetItem> {
+pub trait TargetStorage<SnapshotItem, TargetItem>: Send + Sync + 'static {
     async fn put_object(
         &self,
         snapshot: &SnapshotItem,
@@ -31,7 +31,7 @@ pub trait TargetStorage<SnapshotItem, TargetItem> {
 #[async_trait]
 impl<Source, Snapshot> SourceStorage<Snapshot, TransferPath> for Source
 where
-    Source: SnapshotStorage<Snapshot> + Send + Sync,
+    Source: SnapshotStorage<Snapshot>,
     Snapshot: Key,
 {
     async fn get_object(&self, snapshot: &Snapshot, _mission: &Mission) -> Result<TransferPath> {
