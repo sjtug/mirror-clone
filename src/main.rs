@@ -44,7 +44,11 @@ macro_rules! transfer {
                     source: $source,
                     buffer_path: buffer_path.clone(),
                 };
-                let source = index_pipe::IndexPipe::new(source, buffer_path);
+                let source = index_pipe::IndexPipe::new(
+                    source,
+                    buffer_path,
+                    $opts.s3_config.s3_prefix.clone().unwrap(),
+                );
                 let target: S3Backend = $opts.s3_config.into();
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
                 transfer.transfer().await.unwrap();
@@ -55,7 +59,7 @@ macro_rules! transfer {
                     source: $source,
                     buffer_path: buffer_path.clone(),
                 };
-                let source = index_pipe::IndexPipe::new(source, buffer_path);
+                let source = index_pipe::IndexPipe::new(source, buffer_path, "Root".to_string());
                 let target: FileBackend = $opts.file_config.into();
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
                 transfer.transfer().await.unwrap();

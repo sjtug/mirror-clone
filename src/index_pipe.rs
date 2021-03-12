@@ -18,6 +18,7 @@ pub struct IndexPipe<Source> {
     source: Source,
     index: Index,
     buffer_path: String,
+    base_path: String,
 }
 
 #[derive(Debug)]
@@ -58,44 +59,116 @@ impl Index {
         result
     }
 
-    fn index_for(&self, prefix: &str, current_directory: &str, list_key: &str) -> String {
+    fn generate_navbar(&self, breadcrumb: &[&str], list_key: &str) -> String {
+        let mut parent = "".to_string();
+        let mut items = vec![];
+        let mut is_first = true;
+        for item in breadcrumb.iter().rev() {
+            let item = html_escape::encode_text(item);
+            if is_first {
+                items.push(format!(
+                    r#"<li class="breadcrumb-item active" aria-current="page">{}</li>"#,
+                    item
+                ));
+                is_first = false;
+            } else {
+                items.push(format!(
+                    r#"<li class="breadcrumb-item"><a href="{}{}">{}</a></li>"#,
+                    parent, list_key, item
+                ));
+            }
+            parent += "../";
+        }
+        items.reverse();
+        format!(
+            r#"
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        {}
+    </ol>
+</nav>
+        "#,
+            items.join("\n")
+        )
+    }
+
+    fn index_for(&self, prefix: &str, breadcrumb: &[&str], list_key: &str) -> String {
         if prefix == "" {
             let mut data = String::new();
-            // TODO: need escape HTML and URL
-            data += &format!("<p>{}</p>", html_escape::encode_text(current_directory));
+
+            let title = breadcrumb
+                .last()
+                .map(|x| html_escape::encode_text(x).to_string())
+                .unwrap_or("Root".to_string());
+            let navbar = self.generate_navbar(breadcrumb, list_key);
+
+            data += &format!(r#"<tr><td><a href="../{}">..</a></td></tr>"#, list_key);
             data += &self
                 .prefixes
                 .iter()
                 .map(|(key, _)| {
                     format!(
-                        r#"<a href="{}/{}">{}/</a>"#,
+                        r#"<tr><td><a href="{}/{}">{}/</a></td></tr>"#,
                         urlencoding::encode(key),
                         list_key,
                         html_escape::encode_text(key)
                     )
                 })
                 .collect_vec()
-                .join("\n<br>\n");
-            data += "\n<br>\n";
+                .join("\n");
+            data += "\n";
             data += &self
                 .objects
                 .iter()
                 .map(|key| {
                     format!(
-                        r#"<a href="{}">{}</a>"#,
+                        r#"<tr><td><a href="{}">{}</a></td></tr>"#,
                         urlencoding::encode(key),
                         html_escape::encode_text(key)
                     )
                 })
                 .collect_vec()
-                .join("\n<br>\n");
-            data
+                .join("\n");
+            format!(
+                r#"
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/4.5.3/css/bootstrap.min.css" rel="stylesheet">
+
+    <title>{} - SJTUG Mirror Index</title>
+</head>
+
+<body>
+    <div class="container mt-3">
+        {}
+        <table class="table table-sm table-borderless">
+            <tbody>
+                {}
+            </tbody>
+        </table>
+        <p class="small text-muted">该页面由 mirror-clone 自动生成。<a href="https://github.com/sjtug/mirror-clone">mirror-clone</a> 是 SJTUG 用于将软件源同步到对象存储的工具。</p>
+        <p class="small text-muted">生成于 {}</p>
+    </div>
+</body>
+
+</html>"#,
+                title,
+                navbar,
+                data,
+                chrono::Utc::now().to_rfc2822()
+            )
         } else {
             if let Some((parent, rest)) = prefix.split_once('/') {
+                let mut breadcrumb = breadcrumb.to_vec();
+                breadcrumb.push(parent);
                 self.prefixes
                     .get(parent)
                     .unwrap()
-                    .index_for(rest, parent, list_key)
+                    .index_for(rest, &breadcrumb, list_key)
             } else {
                 panic!("unsupported prefix {}", prefix);
             }
@@ -112,11 +185,12 @@ fn generate_index(objects: &[String]) -> Index {
 }
 
 impl<Source> IndexPipe<Source> {
-    pub fn new(source: Source, buffer_path: String) -> Self {
+    pub fn new(source: Source, buffer_path: String, base_path: String) -> Self {
         Self {
             source,
             index: Index::new(),
             buffer_path,
+            base_path,
         }
     }
 
@@ -185,7 +259,11 @@ where
         if key.ends_with(LIST_URL) {
             let content = self
                 .index
-                .index_for(&key[..key.len() - LIST_URL.len()], "", LIST_URL)
+                .index_for(
+                    &key[..key.len() - LIST_URL.len()],
+                    &[&self.base_path],
+                    LIST_URL,
+                )
                 .into_bytes();
             let pipe_file = format!("{}.{}.buffer", hash_string(key), unix_time());
             let path = Path::new(&self.buffer_path).join(pipe_file);

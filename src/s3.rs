@@ -11,6 +11,9 @@
 //! we put `go@1.10-1.10.8.catalina.bottle.2.tar.gz` into SJTU S3,
 //! the `@` character won't be ignored. You may access it either at
 //! `go@...` or `go%40...` on HTTP.
+//!
+//! This backend will automatically add a MIME type for object, based on
+//! suffix.
 
 use std::{collections::HashMap, sync::atomic::AtomicU64};
 
@@ -243,6 +246,15 @@ impl S3Metadata for SnapshotMeta {
     }
 }
 
+fn get_mime(key: &str) -> Option<String> {
+    // TODO: add more types from https://github.com/nginx/nginx/blob/master/conf/mime.types
+    if key.ends_with(".htm") || key.ends_with(".html") || key.ends_with(".shtml") {
+        Some("text/html; charset=utf-8".to_string())
+    } else {
+        None
+    }
+}
+
 #[async_trait]
 impl<Snapshot> TargetStorage<Snapshot, ByteStream> for S3Backend
 where
@@ -275,6 +287,7 @@ where
             body: Some(rusoto_s3::StreamingBody::new(body)),
             metadata: Some(metadata),
             content_length: Some(length as i64),
+            content_type: get_mime(snapshot.key()),
             ..Default::default()
         };
 
