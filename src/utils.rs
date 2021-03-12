@@ -78,13 +78,6 @@ pub fn rewrite_url_string(url_encode_map: &[(&'static str, &'static str)], key: 
     key
 }
 
-pub fn rewrite_snapshot(target_snapshot: &mut [SnapshotPath]) {
-    let gen_map = generate_s3_url_encode_map();
-    for path in target_snapshot {
-        path.0 = rewrite_url_string(&gen_map, &path.0);
-    }
-}
-
 pub fn fn_regex_rewrite(
     pattern: String,
     rewrite: String,
