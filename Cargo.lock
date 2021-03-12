@@ -834,6 +834,7 @@ dependencies = [
  "indicatif",
  "iter-set",
  "itertools",
+ "lazy_static",
  "md-5",
  "rand",
  "regex",

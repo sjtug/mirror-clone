@@ -1,6 +1,9 @@
 use crate::conda::CondaConfig;
 use crate::crates_io::CratesIo as CratesIoConfig;
 use crate::file_backend::FileBackend;
+use crate::ghcup::{
+    Ghcup as GhcupConfig, GhcupScript as GhcupScriptConfig, GhcupYaml as GhcupYamlConfig,
+};
 use crate::homebrew::Homebrew as HomebrewConfig;
 use crate::pypi::Pypi as PypiConfig;
 use crate::rsync::Rsync as RsyncConfig;
@@ -24,6 +27,12 @@ pub enum Source {
     Conda(CondaConfig),
     #[structopt(about = "rsync")]
     Rsync(RsyncConfig),
+    #[structopt(about = "ghcup")]
+    Ghcup(GhcupConfig),
+    #[structopt(about = "ghcup install script")]
+    GhcupScript(GhcupScriptConfig),
+    #[structopt(about = "ghcup yaml")]
+    GhcupYaml(GhcupYamlConfig),
 }
 
 #[derive(Debug)]
