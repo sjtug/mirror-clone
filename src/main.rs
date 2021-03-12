@@ -6,6 +6,7 @@ mod crates_io;
 mod dart;
 mod error;
 mod file_backend;
+mod ghcup;
 mod github_release;
 mod gradle;
 mod homebrew;
@@ -27,10 +28,30 @@ mod utils;
 
 use common::SnapshotConfig;
 use file_backend::FileBackend;
+use lazy_static::lazy_static;
 use opts::{Source, Target};
 use s3::S3Backend;
 use simple_diff_transfer::SimpleDiffTransfer;
 use structopt::StructOpt;
+
+macro_rules! index_rewrite_bytes_pipe {
+    ($buffer_path: expr, $prefix: expr, $use_snapshot_last_modified: expr, $pattern: expr, $target: expr, $maxlen: expr) => {
+        |source| {
+            let source = stream_pipe::ByteStreamPipe::new(source, $buffer_path.clone().unwrap(), $use_snapshot_last_modified);
+            let source = rewrite_pipe::RewritePipe::new(
+                source,
+                $buffer_path.clone().unwrap(),
+                utils::fn_regex_rewrite($pattern, $target),
+                $maxlen,
+            );
+            index_pipe::IndexPipe::new(
+                source,
+                $buffer_path.clone().unwrap(),
+                $prefix.clone().unwrap(),
+            )
+        }
+    };
+}
 
 macro_rules! index_bytes_pipe {
     ($buffer_path: expr, $prefix: expr, $use_snapshot_last_modified: expr) => {
@@ -68,6 +89,11 @@ macro_rules! transfer {
             }
         }
     };
+}
+
+lazy_static! {
+    static ref HASKELL_PATTERN: regex::Regex =
+        regex::Regex::new("https://downloads.haskell.org").unwrap();
 }
 
 fn main() {
@@ -162,6 +188,46 @@ fn main() {
                     source,
                     transfer_config,
                     index_bytes_pipe!(buffer_path, prefix, false)
+                );
+            }
+            Source::Ghcup(source) => {
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix, true)
+                );
+            }
+            Source::GhcupYaml(source) => {
+                let target = source.target_mirror.trim_end_matches('/').to_string();
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_rewrite_bytes_pipe!(
+                        buffer_path,
+                        prefix,
+                        true,
+                        &HASKELL_PATTERN,
+                        target,
+                        999999
+                    )
+                );
+            }
+            Source::GhcupScript(source) => {
+                let target = source.target_mirror.trim_end_matches('/').to_string();
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_rewrite_bytes_pipe!(
+                        buffer_path,
+                        prefix,
+                        true,
+                        &HASKELL_PATTERN,
+                        target,
+                        999999
+                    )
                 );
             }
         }
