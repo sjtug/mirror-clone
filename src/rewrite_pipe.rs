@@ -1,3 +1,14 @@
+//! RewritePipe rewrites content of `ByteStream`.
+//!
+//! A `RewritePipe` is a wrapper on `ByteStream`, which may be provided by
+//! a `ByteStreamPipe` or a `SourceStorage` directly.
+//! It rewrites the content of the input by applying user-defined functions,
+//! and yields the modified `ByteStream`.
+//!
+//! The rewriting process relies on `ByteStream` which only supports
+//! `LocalFile` currently.
+//! So a new file will be created when rewriting and deleted when dropped.
+
 use async_trait::async_trait;
 
 use crate::common::{Mission, SnapshotConfig};
@@ -51,6 +62,7 @@ where
     }
 }
 
+// TODO support rewrite functions with `RewriteItem` other than String (eg. Vec<u8>)
 #[async_trait]
 impl<Snapshot, Source> SourceStorage<Snapshot, ByteStream> for RewritePipe<Source, String>
 where
