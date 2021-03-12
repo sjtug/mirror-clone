@@ -1,6 +1,8 @@
-use crate::common::SnapshotPath;
 use indicatif::ProgressStyle;
 use slog::{o, Drain};
+
+use crate::common::SnapshotPath;
+use crate::error::{Error, Result};
 
 pub fn create_logger() -> slog::Logger {
     let decorator = slog_term::TermDecorator::new().build();
@@ -81,6 +83,17 @@ pub fn rewrite_snapshot(target_snapshot: &mut [SnapshotPath]) {
     for path in target_snapshot {
         path.0 = rewrite_url_string(&gen_map, &path.0);
     }
+}
+
+pub fn fn_regex_rewrite(
+    pattern: String,
+    rewrite: String,
+) -> Box<dyn Fn(String) -> Result<String> + Sync + Send> {
+    Box::new(move |data| {
+        let re = regex::Regex::new(pattern.as_str())
+            .map_err(|_| Error::ConfigureError(String::from("invalid regex pattern")))?;
+        Ok(re.replace_all(data.as_str(), rewrite.as_str()).to_string())
+    })
 }
 
 pub fn hash_string(key: &str) -> String {

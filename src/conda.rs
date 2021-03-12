@@ -17,7 +17,7 @@ use serde_json::Value as JsonValue;
 use slog::{info, warn};
 use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Clone, StructOpt)]
 pub struct CondaConfig {
     pub repo_config: String,
 }

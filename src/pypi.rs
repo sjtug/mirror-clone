@@ -19,7 +19,7 @@ use regex::Regex;
 use slog::{info, warn};
 use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Clone, StructOpt)]
 pub struct Pypi {
     /// Base of simple index
     #[structopt(

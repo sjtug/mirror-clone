@@ -28,6 +28,8 @@ pub enum Error {
     PipeError(String),
     #[error("Json Decode Error {0}")]
     JsonDecodeError(#[from] serde_json::Error),
+    #[error("Yaml Decode Error {0}")]
+    YamlDecodeError(#[from] serde_yaml::Error),
     #[error("Datetime Parse Error {0}")]
     DatetimeParseError(#[from] chrono::ParseError),
 }

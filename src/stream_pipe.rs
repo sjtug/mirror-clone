@@ -1,4 +1,4 @@
-//! ByteStreamPipe pipes TransferURL to ByteObject
+//! ByteStreamPipe pipes TransferURL to ByteObject.
 //!
 //! A `ByteStreamPipe` is a wrapper on sources which yields `TransferURL`.
 //! After piping a source through `ByteStreamPipe`, it will become a source
@@ -19,8 +19,7 @@ use futures_core::Stream;
 use futures_util::{StreamExt, TryStreamExt};
 use slog::debug;
 use tokio::fs::OpenOptions;
-use tokio::io::BufReader;
-use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
+use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio_util::codec;
 
 pub enum ByteObject {
@@ -76,6 +75,15 @@ pub struct ByteStream {
 pub struct ByteStreamPipe<Source> {
     pub source: Source,
     pub buffer_path: String,
+}
+
+impl<Source> ByteStreamPipe<Source> {
+    pub fn new(source: Source, buffer_path: String) -> Self {
+        Self {
+            source,
+            buffer_path,
+        }
+    }
 }
 
 #[async_trait]

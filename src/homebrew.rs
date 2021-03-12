@@ -15,7 +15,7 @@ use serde_json::Value;
 use slog::info;
 use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Clone, StructOpt)]
 pub struct Homebrew {
     #[structopt(long, default_value = "https://formulae.brew.sh/api/formula.json")]
     pub api_base: String,
