@@ -131,11 +131,23 @@ pub struct TransferConfig {
 
 #[derive(StructOpt, Debug)]
 pub struct RewriteConfig {
-    #[structopt(long, help = "Rewrite pattern (regex)")]
+    #[structopt(
+        long,
+        help = "Rewrite pattern (regex)",
+        requires_all(&["rewrite-target", "rewrite-maxlen"])
+    )]
     pub rewrite_pattern: Option<String>,
-    #[structopt(long, help = "Rewrite target")]
+    #[structopt(
+        long,
+        help = "Rewrite target",
+        requires_all(&["rewrite-pattern", "rewrite-maxlen"])
+    )]
     pub rewrite_target: Option<String>,
-    #[structopt(long, help = "Maximum content length to be processed when rewriting")]
+    #[structopt(
+        long,
+        help = "Maximum content length to be processed when rewriting",
+        requires_all(&["rewrite-pattern", "rewrite-target"])
+    )]
     pub rewrite_maxlen: Option<u64>,
 }
 
