@@ -37,7 +37,7 @@ jobs:
         name: Run Clippy Lints 🔨
         with:
           command: clippy
-          args: --all-targets --all-features -- -D warnings
+          args: --all-targets --all-features
       - uses: actions-rs/cargo@v1
         name: Running Tests 🚀
         with:

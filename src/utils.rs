@@ -2,7 +2,7 @@ use indicatif::ProgressStyle;
 use slog::{o, Drain};
 
 use crate::common::SnapshotPath;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use regex::Regex;
 
 pub fn create_logger() -> slog::Logger {

@@ -1,3 +1,5 @@
+#![deny(clippy::all)]
+
 mod common;
 mod conda;
 mod crates_io;
@@ -30,7 +32,6 @@ use opts::{Source, Target};
 use s3::S3Backend;
 use simple_diff_transfer::SimpleDiffTransfer;
 use structopt::StructOpt;
-use utils::fn_regex_rewrite;
 
 macro_rules! index_bytes_pipe {
     ($buffer_path: expr, $prefix: expr) => {
@@ -105,7 +106,7 @@ fn main() {
             .s3_config
             .s3_buffer_path
             .clone()
-            .or(Some(String::from("Root")));
+            .or_else(|| Some(String::from("Root")));
         match opts.source {
             Source::Pypi(source) => {
                 transfer!(
