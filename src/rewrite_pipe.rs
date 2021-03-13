@@ -15,9 +15,7 @@ use crate::common::{Mission, SnapshotConfig};
 use crate::error::{Error, Result};
 use crate::stream_pipe::{ByteObject, ByteStream};
 use crate::traits::{SnapshotStorage, SourceStorage};
-use crate::utils::{hash_string, unix_time};
-use tokio::fs::OpenOptions;
-use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufWriter};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 pub struct RewritePipe<Source, RewriteItem> {
     pub source: Source,
@@ -78,55 +76,25 @@ where
             match byte_stream.object {
                 ByteObject::LocalFile {
                     ref mut file,
-                    ref path,
+                    path: _,
                 } => {
-                    if let (Some(file), Some(path)) = (file, path) {
+                    if let Some(ref mut file) = file {
                         let mut buffer = String::new();
                         file.read_to_string(&mut buffer).await?;
                         let content = (*self.rewrite_fn)(buffer)?.into_bytes();
                         let content_length = content.len() as u64;
 
-                        let original_filename = path
-                            .file_name()
-                            .ok_or_else(|| {
-                                Error::StorageError(String::from("given path is not a file"))
-                            })?
-                            .to_str()
-                            .ok_or_else(|| {
-                                Error::StorageError(String::from("corrupted filename"))
-                            })?;
-                        let path = format!(
-                            "{}/{}.{}.rewrite.buffer",
-                            self.buffer_path,
-                            hash_string(original_filename),
-                            unix_time()
-                        );
-                        let mut f = BufWriter::new(
-                            OpenOptions::default()
-                                .create(true)
-                                .truncate(true)
-                                .write(true)
-                                .read(true)
-                                .open(&path)
-                                .await?,
-                        );
-                        f.write_all(&content).await?;
-                        f.flush().await?;
+                        file.seek(std::io::SeekFrom::Start(0)).await?;
+                        file.set_len(0).await?;
+                        file.write_all(&content).await?;
+                        file.flush().await?;
+                        file.seek(std::io::SeekFrom::Start(0)).await?;
 
-                        let mut f = f.into_inner();
-                        f.seek(std::io::SeekFrom::Start(0)).await?;
-
-                        Ok(ByteStream {
-                            object: ByteObject::LocalFile {
-                                file: Some(f),
-                                path: Some(path.into()),
-                            },
-                            length: content_length,
-                            modified_at: byte_stream.modified_at,
-                        })
+                        byte_stream.length = content_length;
+                        Ok(byte_stream)
                     } else {
                         Err(Error::ProcessError(String::from(
-                            "missing file or path when rewriting",
+                            "missing file when rewriting",
                         )))
                     }
                 }
