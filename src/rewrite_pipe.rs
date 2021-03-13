@@ -89,11 +89,11 @@ where
                         let original_filename = path
                             .file_name()
                             .ok_or_else(|| {
-                                Error::ProcessError(String::from("given path is not a file"))
+                                Error::StorageError(String::from("given path is not a file"))
                             })?
                             .to_str()
                             .ok_or_else(|| {
-                                Error::ProcessError(String::from("corrupted filename"))
+                                Error::StorageError(String::from("corrupted filename"))
                             })?;
                         let path = format!(
                             "{}/{}.{}.rewrite.buffer",
