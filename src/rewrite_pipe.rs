@@ -11,6 +11,8 @@
 
 use async_trait::async_trait;
 
+use slog::warn;
+
 use crate::common::{Mission, SnapshotConfig};
 use crate::error::{Error, Result};
 use crate::stream_pipe::{ByteObject, ByteStream};
@@ -68,6 +70,8 @@ where
     Source: SourceStorage<Snapshot, ByteStream>,
 {
     async fn get_object(&self, snapshot: &Snapshot, mission: &Mission) -> Result<ByteStream> {
+        let logger = &mission.logger;
+
         let mut byte_stream = self.source.get_object(snapshot, mission).await?;
 
         if byte_stream.length > self.max_length {
@@ -80,18 +84,30 @@ where
                 } => {
                     if let Some(ref mut file) = file {
                         let mut buffer = String::new();
-                        file.read_to_string(&mut buffer).await?;
-                        let content = (*self.rewrite_fn)(buffer)?.into_bytes();
-                        let content_length = content.len() as u64;
+                        if file.read_to_string(&mut buffer).await.is_err() {
+                            warn!(logger, "rewrite_pipe: not a valid UTF-8 file, ignored");
+                            Ok(byte_stream)
+                        } else {
+                            match (*self.rewrite_fn)(buffer) {
+                                Err(e) => {
+                                    warn!(logger, "rewrite_pipe: {:?}, ignored", e);
+                                    Ok(byte_stream)
+                                }
+                                Ok(content) => {
+                                    let content = content.into_bytes();
+                                    let content_length = content.len() as u64;
 
-                        file.seek(std::io::SeekFrom::Start(0)).await?;
-                        file.set_len(0).await?;
-                        file.write_all(&content).await?;
-                        file.flush().await?;
-                        file.seek(std::io::SeekFrom::Start(0)).await?;
+                                    file.seek(std::io::SeekFrom::Start(0)).await?;
+                                    file.set_len(0).await?;
+                                    file.write_all(&content).await?;
+                                    file.flush().await?;
+                                    file.seek(std::io::SeekFrom::Start(0)).await?;
 
-                        byte_stream.length = content_length;
-                        Ok(byte_stream)
+                                    byte_stream.length = content_length;
+                                    Ok(byte_stream)
+                                }
+                            }
+                        }
                     } else {
                         Err(Error::ProcessError(String::from(
                             "missing file when rewriting",
