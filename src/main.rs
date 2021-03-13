@@ -23,7 +23,6 @@ mod timeout;
 mod traits;
 mod utils;
 
-use crate::utils::fn_regex_rewrite;
 use common::SnapshotConfig;
 use file_backend::FileBackend;
 use mirror_intel::MirrorIntel;
@@ -31,72 +30,38 @@ use opts::{Source, Target};
 use s3::S3Backend;
 use simple_diff_transfer::SimpleDiffTransfer;
 use structopt::StructOpt;
+use utils::fn_regex_rewrite;
 
-macro_rules! regex_rewrite_pipe {
-    ($opts: expr, $source: expr, $buffer_path: expr, $pattern: expr, $replace: expr, $max_length: expr) => {
-        rewrite_pipe::RewritePipe::new(
-            $source,
-            $buffer_path,
-            fn_regex_rewrite($pattern, $replace),
-            $max_length,
-        )
-    };
-}
-
-macro_rules! try_rewrite {
-    ($opts: expr, $source: expr, $buffer_path: expr, $cont: expr) => {
-        if let opts::RewriteConfig {
-            rewrite_pattern: Some(pattern),
-            rewrite_target: Some(target),
-            rewrite_maxlen: Some(max_length),
-        } = $opts.rewrite_config
-        {
-            let source =
-                regex_rewrite_pipe!($opts, $source, $buffer_path, pattern, target, max_length);
-            let cont = $cont;
-            cont(source).await
-        } else {
-            let cont = $cont;
-            cont($source).await
+macro_rules! index_bytes_pipe {
+    ($buffer_path: expr, $prefix: expr) => {
+        |source| {
+            let source = stream_pipe::ByteStreamPipe::new(source, $buffer_path.clone().unwrap());
+            index_pipe::IndexPipe::new(source, $buffer_path.clone().unwrap(), $prefix.clone().unwrap())
         }
-    };
+    }
 }
 
 macro_rules! transfer {
-    ($opts: expr, $source: expr, $transfer_config: expr) => {
+    ($opts: expr, $source: expr, $transfer_config: expr, $pipes: expr) => {
         match $opts.target_type {
             Target::Intel => {
-                if $opts.rewrite_config.rewrite_pattern.is_some() {
-                    panic!("target intel doesn't support rewrite");
-                }
                 let target: MirrorIntel = $opts.mirror_intel_config.into();
                 let transfer = SimpleDiffTransfer::new($source, target, $transfer_config);
                 transfer.transfer().await.unwrap();
             }
             Target::S3 => {
-                let buffer_path = $opts.s3_config.s3_buffer_path.clone().unwrap();
-                let prefix = $opts.s3_config.s3_prefix.clone().unwrap();
-                let source = stream_pipe::ByteStreamPipe::new($source, buffer_path.clone());
                 let target: S3Backend = $opts.s3_config.clone().into();
-                try_rewrite!($opts, source, buffer_path.clone(), |source| async move {
-                    let source = index_pipe::IndexPipe::new(source, buffer_path.clone(), prefix);
-                    let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
-                    transfer.transfer().await.unwrap();
-                })
+                let pipes = $pipes;
+                let source = pipes($source);
+                let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
+                transfer.transfer().await.unwrap();
             }
             Target::File => {
-                let buffer_path = $opts.file_config.file_buffer_path.clone().unwrap();
-                let source = stream_pipe::ByteStreamPipe::new($source, buffer_path.clone());
                 let target: FileBackend = $opts.file_config.clone().into();
-                try_rewrite!($opts, source, buffer_path.clone(), |source| async move {
-                    let source = index_pipe::IndexPipe::new(
-                        source,
-                        buffer_path.clone(),
-                        String::from("Root"),
-                    );
-                    let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
-                    transfer.transfer().await.unwrap();
-                })
+                let pipes = $pipes;
+                let source = pipes($source);
+                let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
+                transfer.transfer().await.unwrap();
             }
         }
     };
@@ -127,22 +92,24 @@ fn main() {
     };
 
     runtime.block_on(async {
+        let buffer_path = opts.s3_config.s3_buffer_path.clone().or_else(||opts.file_config.file_buffer_path.clone());
+        let prefix = opts.s3_config.s3_buffer_path.clone().or(Some(String::from("Root")));
         match opts.source {
             Source::Pypi(source) => {
-                transfer!(opts, source, transfer_config);
+                transfer!(opts, source, transfer_config, index_bytes_pipe!(buffer_path, prefix));
             }
             Source::Homebrew(source) => {
-                transfer!(opts, source, transfer_config);
+                transfer!(opts, source, transfer_config, index_bytes_pipe!(buffer_path, prefix));
             }
             Source::CratesIo(source) => {
-                transfer!(opts, source, transfer_config);
+                transfer!(opts, source, transfer_config, index_bytes_pipe!(buffer_path, prefix));
             }
             Source::Conda(config) => {
                 let source = conda::Conda::new(config);
-                transfer!(opts, source, transfer_config);
+                transfer!(opts, source, transfer_config, index_bytes_pipe!(buffer_path, prefix));
             }
             Source::Rsync(source) => {
-                transfer!(opts, source, transfer_config);
+                transfer!(opts, source, transfer_config, index_bytes_pipe!(buffer_path, prefix));
             }
         }
     });
