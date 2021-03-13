@@ -110,7 +110,7 @@ where
                                 .open(&path)
                                 .await?,
                         );
-                        f.write_all(content.as_ref()).await?;
+                        f.write_all(&content).await?;
                         f.flush().await?;
 
                         let mut f = f.into_inner();

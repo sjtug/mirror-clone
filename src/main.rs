@@ -36,9 +36,13 @@ macro_rules! index_bytes_pipe {
     ($buffer_path: expr, $prefix: expr) => {
         |source| {
             let source = stream_pipe::ByteStreamPipe::new(source, $buffer_path.clone().unwrap());
-            index_pipe::IndexPipe::new(source, $buffer_path.clone().unwrap(), $prefix.clone().unwrap())
+            index_pipe::IndexPipe::new(
+                source,
+                $buffer_path.clone().unwrap(),
+                $prefix.clone().unwrap(),
+            )
         }
-    }
+    };
 }
 
 macro_rules! transfer {
@@ -92,24 +96,57 @@ fn main() {
     };
 
     runtime.block_on(async {
-        let buffer_path = opts.s3_config.s3_buffer_path.clone().or_else(||opts.file_config.file_buffer_path.clone());
-        let prefix = opts.s3_config.s3_buffer_path.clone().or(Some(String::from("Root")));
+        let buffer_path = opts
+            .s3_config
+            .s3_buffer_path
+            .clone()
+            .or_else(|| opts.file_config.file_buffer_path.clone());
+        let prefix = opts
+            .s3_config
+            .s3_buffer_path
+            .clone()
+            .or(Some(String::from("Root")));
         match opts.source {
             Source::Pypi(source) => {
-                transfer!(opts, source, transfer_config, index_bytes_pipe!(buffer_path, prefix));
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix)
+                );
             }
             Source::Homebrew(source) => {
-                transfer!(opts, source, transfer_config, index_bytes_pipe!(buffer_path, prefix));
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix)
+                );
             }
             Source::CratesIo(source) => {
-                transfer!(opts, source, transfer_config, index_bytes_pipe!(buffer_path, prefix));
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix)
+                );
             }
             Source::Conda(config) => {
                 let source = conda::Conda::new(config);
-                transfer!(opts, source, transfer_config, index_bytes_pipe!(buffer_path, prefix));
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix)
+                );
             }
             Source::Rsync(source) => {
-                transfer!(opts, source, transfer_config, index_bytes_pipe!(buffer_path, prefix));
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix)
+                );
             }
         }
     });
