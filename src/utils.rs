@@ -1,9 +1,9 @@
 use indicatif::ProgressStyle;
+use regex::Regex;
 use slog::{o, Drain};
 
 use crate::common::SnapshotPath;
 use crate::error::Result;
-use regex::Regex;
 
 pub fn create_logger() -> slog::Logger {
     let decorator = slog_term::TermDecorator::new().build();
@@ -80,14 +80,14 @@ pub fn rewrite_url_string(url_encode_map: &[(&'static str, &'static str)], key: 
 }
 
 pub fn fn_regex_rewrite(
-    pattern: Regex,
+    pattern: &Regex,
     rewrite: String,
-) -> Box<dyn Fn(String) -> Result<String> + Sync + Send> {
-    Box::new(move |data| {
+) -> impl Fn(String) -> Result<String> + Sync + Send + '_ {
+    move |data| {
         Ok(pattern
             .replace_all(data.as_str(), rewrite.as_str())
             .to_string())
-    })
+    }
 }
 
 pub fn hash_string(key: &str) -> String {

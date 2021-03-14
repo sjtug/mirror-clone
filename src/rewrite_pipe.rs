@@ -19,35 +19,40 @@ use crate::stream_pipe::{ByteObject, ByteStream};
 use crate::traits::{SnapshotStorage, SourceStorage};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
-pub struct RewritePipe<Source, RewriteItem> {
+pub struct RewritePipe<Source, RewriteItem, F>
+where
+    F: Fn(RewriteItem) -> Result<RewriteItem> + Send + Sync,
+{
     pub source: Source,
     pub buffer_path: String,
-    pub rewrite_fn: Box<dyn Fn(RewriteItem) -> Result<RewriteItem> + Send + Sync>,
+    pub rewrite_fn: F,
     pub max_length: u64,
+    _phantom: std::marker::PhantomData<RewriteItem>,
 }
 
-impl<Source, RewriteItem> RewritePipe<Source, RewriteItem> {
-    pub fn new(
-        source: Source,
-        buffer_path: String,
-        rewrite_fn: Box<dyn Fn(RewriteItem) -> Result<RewriteItem> + Send + Sync>,
-        max_length: u64,
-    ) -> Self {
+impl<Source, RewriteItem, F> RewritePipe<Source, RewriteItem, F>
+where
+    F: Fn(RewriteItem) -> Result<RewriteItem> + Send + Sync,
+{
+    pub fn new(source: Source, buffer_path: String, rewrite_fn: F, max_length: u64) -> Self {
         Self {
             source,
             buffer_path,
             rewrite_fn,
             max_length,
+            _phantom: Default::default(),
         }
     }
 }
 
 #[async_trait]
-impl<Snapshot, Source, RewriteItem> SnapshotStorage<Snapshot> for RewritePipe<Source, RewriteItem>
+impl<Snapshot, Source, RewriteItem, F> SnapshotStorage<Snapshot>
+    for RewritePipe<Source, RewriteItem, F>
 where
     Snapshot: Send + 'static,
     Source: SnapshotStorage<Snapshot> + Send,
-    RewriteItem: 'static,
+    RewriteItem: Send + Sync + 'static,
+    F: Fn(RewriteItem) -> Result<RewriteItem> + Send + Sync + 'static,
 {
     async fn snapshot(
         &mut self,
@@ -64,10 +69,11 @@ where
 
 // TODO support rewrite functions with `RewriteItem` other than String (eg. Vec<u8>)
 #[async_trait]
-impl<Snapshot, Source> SourceStorage<Snapshot, ByteStream> for RewritePipe<Source, String>
+impl<Snapshot, Source, F> SourceStorage<Snapshot, ByteStream> for RewritePipe<Source, String, F>
 where
     Snapshot: Send + Sync + 'static,
     Source: SourceStorage<Snapshot, ByteStream>,
+    F: Fn(String) -> Result<String> + Send + Sync + 'static,
 {
     async fn get_object(&self, snapshot: &Snapshot, mission: &Mission) -> Result<ByteStream> {
         let logger = &mission.logger;
@@ -88,7 +94,7 @@ where
                             warn!(logger, "rewrite_pipe: not a valid UTF-8 file, ignored");
                             Ok(byte_stream)
                         } else {
-                            match (*self.rewrite_fn)(buffer) {
+                            match (self.rewrite_fn)(buffer) {
                                 Err(e) => {
                                     warn!(logger, "rewrite_pipe: {:?}, ignored", e);
                                     Ok(byte_stream)
