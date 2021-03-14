@@ -20,17 +20,17 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
-use crate::error::{Error, Result};
-use crate::traits::{SnapshotStorage, SourceStorage};
-
-use crate::metadata::SnapshotMeta;
 use async_trait::async_trait;
 use chrono::DateTime;
 use reqwest::Client;
 use serde::Deserialize;
 use slog::info;
 use structopt::StructOpt;
+
+use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
+use crate::error::{Error, Result};
+use crate::metadata::SnapshotMeta;
+use crate::traits::{SnapshotStorage, SourceStorage};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -251,10 +251,11 @@ impl SourceStorage<SnapshotMeta, TransferURL> for GhcupYaml {
 pub struct Ghcup {
     #[structopt(
         long,
+        help = "Ghcup upstream",
         default_value = "https://gitlab.haskell.org/haskell/ghcup-hs/-/raw/master/"
     )]
     pub ghcup_base: String,
-    #[structopt(long)]
+    #[structopt(long, help = "Include legacy versions of packages")]
     pub include_old_versions: bool,
 }
 
