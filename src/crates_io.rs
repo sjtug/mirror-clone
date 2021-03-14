@@ -20,7 +20,7 @@ pub struct CratesIoPackage {
     cksum: String,
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Clone, StructOpt)]
 pub struct CratesIo {
     #[structopt(
         long,

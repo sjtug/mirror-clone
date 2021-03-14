@@ -1,3 +1,5 @@
+#![deny(clippy::all)]
+
 mod common;
 mod conda;
 mod crates_io;
@@ -13,6 +15,7 @@ mod metadata;
 mod mirror_intel;
 mod opts;
 mod pypi;
+mod rewrite_pipe;
 mod rsync;
 mod rustup;
 mod s3;
@@ -30,8 +33,21 @@ use s3::S3Backend;
 use simple_diff_transfer::SimpleDiffTransfer;
 use structopt::StructOpt;
 
+macro_rules! index_bytes_pipe {
+    ($buffer_path: expr, $prefix: expr) => {
+        |source| {
+            let source = stream_pipe::ByteStreamPipe::new(source, $buffer_path.clone().unwrap());
+            index_pipe::IndexPipe::new(
+                source,
+                $buffer_path.clone().unwrap(),
+                $prefix.clone().unwrap(),
+            )
+        }
+    };
+}
+
 macro_rules! transfer {
-    ($opts: expr, $source: expr, $transfer_config: expr) => {
+    ($opts: expr, $source: expr, $transfer_config: expr, $pipes: expr) => {
         match $opts.target_type {
             Target::Intel => {
                 let target: MirrorIntel = $opts.mirror_intel_config.into();
@@ -39,28 +55,16 @@ macro_rules! transfer {
                 transfer.transfer().await.unwrap();
             }
             Target::S3 => {
-                let buffer_path = $opts.s3_config.s3_buffer_path.clone().unwrap();
-                let source = stream_pipe::ByteStreamPipe {
-                    source: $source,
-                    buffer_path: buffer_path.clone(),
-                };
-                let source = index_pipe::IndexPipe::new(
-                    source,
-                    buffer_path,
-                    $opts.s3_config.s3_prefix.clone().unwrap(),
-                );
-                let target: S3Backend = $opts.s3_config.into();
+                let target: S3Backend = $opts.s3_config.clone().into();
+                let pipes = $pipes;
+                let source = pipes($source);
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
                 transfer.transfer().await.unwrap();
             }
             Target::File => {
-                let buffer_path = $opts.file_config.file_buffer_path.clone().unwrap();
-                let source = stream_pipe::ByteStreamPipe {
-                    source: $source,
-                    buffer_path: buffer_path.clone(),
-                };
-                let source = index_pipe::IndexPipe::new(source, buffer_path, "Root".to_string());
-                let target: FileBackend = $opts.file_config.into();
+                let target: FileBackend = $opts.file_config.clone().into();
+                let pipes = $pipes;
+                let source = pipes($source);
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
                 transfer.transfer().await.unwrap();
             }
@@ -93,22 +97,57 @@ fn main() {
     };
 
     runtime.block_on(async {
+        let buffer_path = opts
+            .s3_config
+            .s3_buffer_path
+            .clone()
+            .or_else(|| opts.file_config.file_buffer_path.clone());
+        let prefix = opts
+            .s3_config
+            .s3_buffer_path
+            .clone()
+            .or_else(|| Some(String::from("Root")));
         match opts.source {
             Source::Pypi(source) => {
-                transfer!(opts, source, transfer_config);
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix)
+                );
             }
             Source::Homebrew(source) => {
-                transfer!(opts, source, transfer_config);
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix)
+                );
             }
             Source::CratesIo(source) => {
-                transfer!(opts, source, transfer_config);
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix)
+                );
             }
             Source::Conda(config) => {
                 let source = conda::Conda::new(config);
-                transfer!(opts, source, transfer_config);
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix)
+                );
             }
             Source::Rsync(source) => {
-                transfer!(opts, source, transfer_config);
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix)
+                );
             }
         }
     });

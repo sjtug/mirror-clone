@@ -56,10 +56,7 @@ pub struct S3Backend {
 }
 
 fn jcloud_region(name: String, endpoint: String) -> Region {
-    Region::Custom {
-        name: name,
-        endpoint,
-    }
+    Region::Custom { name, endpoint }
 }
 
 fn get_s3_client(name: String, endpoint: String) -> S3Client {
@@ -94,7 +91,7 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
         let s3_prefix_base = format!("{}/", self.config.prefix);
         let total_size = std::sync::Arc::new(AtomicU64::new(0));
 
-        let prefix = match self.config.prefix_hint_mode.as_ref().map(|x| x.as_str()) {
+        let prefix = match self.config.prefix_hint_mode.as_deref() {
             Some("pypi") => {
                 let mut prefix = vec![];
                 for i in 0..256 {
@@ -119,7 +116,7 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
                 let s3_prefix_base = s3_prefix_base.clone();
                 let max_keys = self.config.max_keys;
 
-                let scan_future = async move {
+                async move {
                     let mut snapshot = vec![];
                     let mut continuation_token = None;
 
@@ -170,9 +167,7 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
                         }
                     }
                     Ok::<_, Error>(snapshot)
-                };
-
-                scan_future
+                }
             })
             .buffer_unordered(256);
 

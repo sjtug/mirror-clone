@@ -33,7 +33,7 @@ pub enum Target {
     File,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Debug, Clone)]
 pub struct MirrorIntelCliConfig {
     #[structopt(
         long,
@@ -43,34 +43,34 @@ pub struct MirrorIntelCliConfig {
     pub mirror_intel_base: Option<String>,
 }
 
-impl Into<MirrorIntel> for MirrorIntelCliConfig {
-    fn into(self) -> MirrorIntel {
-        MirrorIntel::new(self.mirror_intel_base.unwrap())
+impl From<MirrorIntelCliConfig> for MirrorIntel {
+    fn from(config: MirrorIntelCliConfig) -> Self {
+        MirrorIntel::new(config.mirror_intel_base.unwrap())
     }
 }
 
-impl Into<S3Backend> for S3CliConfig {
-    fn into(self) -> S3Backend {
-        let mut config = crate::s3::S3Config::new_jcloud(self.s3_prefix.unwrap());
-        if let Some(endpoint) = self.s3_endpoint {
-            config.endpoint = endpoint;
+impl From<S3CliConfig> for S3Backend {
+    fn from(config: S3CliConfig) -> Self {
+        let mut s3_config = crate::s3::S3Config::new_jcloud(config.s3_prefix.unwrap());
+        if let Some(endpoint) = config.s3_endpoint {
+            s3_config.endpoint = endpoint;
         }
-        if let Some(bucket) = self.s3_bucket {
-            config.bucket = bucket;
+        if let Some(bucket) = config.s3_bucket {
+            s3_config.bucket = bucket;
         }
-        config.max_keys = self.s3_max_keys;
-        config.prefix_hint_mode = self.s3_prefix_hint_mode;
-        S3Backend::new(config)
+        s3_config.max_keys = config.s3_max_keys;
+        s3_config.prefix_hint_mode = config.s3_prefix_hint_mode;
+        S3Backend::new(s3_config)
     }
 }
 
-impl Into<FileBackend> for FileBackendConfig {
-    fn into(self) -> FileBackend {
-        FileBackend::new(self.file_base_path.unwrap())
+impl From<FileBackendConfig> for FileBackend {
+    fn from(config: FileBackendConfig) -> Self {
+        FileBackend::new(config.file_base_path.unwrap())
     }
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Debug, Clone)]
 pub struct S3CliConfig {
     #[structopt(long, help = "Endpoint for S3 backend")]
     pub s3_endpoint: Option<String>,
@@ -86,7 +86,7 @@ pub struct S3CliConfig {
     pub s3_max_keys: u64,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Debug, Clone)]
 pub struct FileBackendConfig {
     #[structopt(
         long,

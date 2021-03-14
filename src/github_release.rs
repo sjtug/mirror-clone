@@ -50,7 +50,7 @@ impl SnapshotStorage<SnapshotPath> for GitHubRelease {
         let json: Value = serde_json::from_str(&data).unwrap();
         let releases = json.as_array().unwrap();
         let snapshot: Vec<String> = releases
-            .into_iter()
+            .iter()
             .filter_map(|releases| releases.as_object())
             .filter_map(|releases| {
                 progress.set_message(

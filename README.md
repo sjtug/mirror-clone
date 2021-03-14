@@ -54,6 +54,6 @@ Use `./mirror-clone --help` to view current commands and their meaning.
 
 ## Future Works
 
-* More pipes. For example, rewrite pipe, snapshot cache pipe, etc.
+* More pipes. For example, snapshot cache pipe, etc.
 * More sources.
 * More transfers.

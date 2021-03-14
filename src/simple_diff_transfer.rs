@@ -37,7 +37,7 @@ enum PlanType {
     Delete,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct SimpleDiffTransferConfig {
     pub progress: bool,
     pub concurrent_transfer: usize,

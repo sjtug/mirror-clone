@@ -19,7 +19,7 @@ use regex::Regex;
 use slog::{info, warn};
 use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Clone, StructOpt)]
 pub struct Pypi {
     /// Base of simple index
     #[structopt(
@@ -117,7 +117,7 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
             .try_collect()
             .await;
 
-        let package_base = if self.package_base.ends_with("/") {
+        let package_base = if self.package_base.ends_with('/') {
             self.package_base.clone()
         } else {
             format!("{}/", self.package_base)

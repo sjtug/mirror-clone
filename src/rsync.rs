@@ -27,7 +27,7 @@ use structopt::StructOpt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Clone, StructOpt)]
 pub struct Rsync {
     /// Rsync endpoint
     #[structopt(long, help = "Base of Rsync")]
