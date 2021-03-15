@@ -49,7 +49,7 @@ impl<Source: SnapshotStorage<SnapshotMeta> + std::fmt::Debug + std::marker::Send
         let snapshot = self.source.snapshot(mission, config).await?;
         Ok(snapshot
             .into_iter()
-            .map(|item| SnapshotPath(item.key))
+            .map(|item| SnapshotPath::new(item.key))
             .collect())
     }
 

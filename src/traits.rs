@@ -64,8 +64,8 @@ impl Key for SnapshotPath {
 }
 
 impl Diff for SnapshotPath {
-    fn diff(&self, _other: &Self) -> bool {
-        false
+    fn diff(&self, other: &Self) -> bool {
+        self.1 || other.1
     }
 }
 

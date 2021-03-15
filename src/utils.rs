@@ -29,7 +29,7 @@ pub fn bar() -> ProgressStyle {
 }
 
 pub fn snapshot_string_to_path(snapshot: Vec<String>) -> Vec<SnapshotPath> {
-    snapshot.into_iter().map(SnapshotPath).collect()
+    snapshot.into_iter().map(SnapshotPath::new).collect()
 }
 
 pub fn user_agent() -> String {

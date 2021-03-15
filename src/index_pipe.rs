@@ -215,7 +215,7 @@ where
         let mut snapshot = self.source.snapshot(mission, config).await?;
         let index_keys =
             self.snapshot_index_keys(snapshot.iter().map(|x| x.key().to_owned()).collect());
-        snapshot.extend(index_keys.into_iter().map(SnapshotPath));
+        snapshot.extend(index_keys.into_iter().map(SnapshotPath::force));
         Ok(snapshot)
     }
 
