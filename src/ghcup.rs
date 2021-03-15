@@ -283,7 +283,7 @@ impl SnapshotStorage<SnapshotPath> for Ghcup {
             .ghcup_downloads
             .uris(self.include_old_versions)
             .into_iter()
-            .map(|s| s.trim_start_matches("https://downloads.haskell.org/"))
+            .filter_map(|s| s.strip_prefix("https://downloads.haskell.org/"))
             .map(String::from)
             .collect();
 
