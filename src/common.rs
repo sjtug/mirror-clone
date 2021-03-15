@@ -14,7 +14,17 @@ pub struct SnapshotConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SnapshotPath(pub String);
+pub struct SnapshotPath(pub String, pub bool);
+
+impl SnapshotPath {
+    pub fn new(key: String) -> Self {
+        Self(key, false)
+    }
+
+    pub fn force(key: String) -> Self {
+        Self(key, true)
+    }
+}
 
 #[derive(Debug)]
 pub struct TransferPath(pub String);

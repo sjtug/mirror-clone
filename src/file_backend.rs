@@ -117,7 +117,7 @@ impl SnapshotStorage<SnapshotPath> for FileBackend {
             <Self as SnapshotStorage<SnapshotMeta>>::snapshot(self, mission, config)
                 .await?
                 .into_iter()
-                .map(|x| SnapshotPath(x.key))
+                .map(|x| SnapshotPath::new(x.key))
                 .collect(),
         )
     }
