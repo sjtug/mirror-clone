@@ -104,7 +104,7 @@ fn main() {
             .or_else(|| opts.file_config.file_buffer_path.clone());
         let prefix = opts
             .s3_config
-            .s3_buffer_path
+            .s3_prefix
             .clone()
             .or_else(|| Some(String::from("Root")));
         match opts.source {
