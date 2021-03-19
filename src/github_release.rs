@@ -3,30 +3,53 @@
 //! GitHubRelease source will fetch the GitHub API when taking snapshots.
 //! Then, it will construct a list of downloadable URLs.
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath};
+use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::Result;
+use crate::metadata::SnapshotMeta;
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
-use crate::traits::SnapshotStorage;
-
-use std::time::Duration;
+use crate::traits::{SnapshotStorage, SourceStorage};
 
 use async_trait::async_trait;
-use serde_json::Value;
+use chrono::{DateTime, Utc};
+use serde::Deserialize;
 use slog::info;
+use std::time::Duration;
+use structopt::StructOpt;
 
-#[derive(Debug)]
+#[derive(Deserialize, Debug)]
+pub struct GitHubReleaseAsset {
+    url: String,
+    id: u64,
+    name: String,
+    content_type: String,
+    size: u64,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    browser_download_url: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct GitHubReleaseItem {
+    tag_name: String,
+    name: String,
+    assets: Vec<GitHubReleaseAsset>,
+}
+
+#[derive(Debug, Clone, StructOpt)]
 pub struct GitHubRelease {
+    #[structopt(long, help = "GitHub Repo")]
     pub repo: String,
+    #[structopt(long, help = "Version numbers to retain")]
     pub version_to_retain: usize,
 }
 
 #[async_trait]
-impl SnapshotStorage<SnapshotPath> for GitHubRelease {
+impl SnapshotStorage<SnapshotMeta> for GitHubRelease {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<SnapshotPath>> {
+    ) -> Result<Vec<SnapshotMeta>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -47,34 +70,40 @@ impl SnapshotStorage<SnapshotPath> for GitHubRelease {
             .into_result()?;
 
         info!(logger, "parsing...");
-        let json: Value = serde_json::from_str(&data).unwrap();
-        let releases = json.as_array().unwrap();
-        let snapshot: Vec<String> = releases
-            .iter()
-            .filter_map(|releases| releases.as_object())
-            .filter_map(|releases| {
-                progress.set_message(
-                    releases
-                        .get("tag_name")
-                        .and_then(|tag_name| tag_name.as_str())
-                        .unwrap_or(""),
-                );
-                releases.get("assets")
+        let releases = serde_json::from_str::<Vec<GitHubReleaseItem>>(&data)?;
+        let replace_string = format!("https://github.com/{}/", self.repo);
+        let snapshot: Vec<SnapshotMeta> = releases
+            .into_iter()
+            .map(|release| {
+                progress.set_message(&release.tag_name);
+                release.assets
             })
             .take(self.version_to_retain)
-            .filter_map(|assets| assets.as_array())
             .flatten()
-            .filter_map(|asset| asset.get("browser_download_url"))
-            .filter_map(|url| url.as_str())
-            .map(|url| url.replace("https://github.com/", ""))
+            .map(|asset| SnapshotMeta {
+                key: asset.browser_download_url.replace(&replace_string, ""),
+                size: Some(asset.size),
+                last_modified: Some(asset.updated_at.timestamp() as u64),
+                ..Default::default()
+            })
             .collect();
 
         progress.finish_with_message("done");
 
-        Ok(crate::utils::snapshot_string_to_path(snapshot))
+        Ok(snapshot)
     }
 
     fn info(&self) -> String {
         format!("github releases, {:?}", self)
+    }
+}
+
+#[async_trait]
+impl SourceStorage<SnapshotMeta, TransferURL> for GitHubRelease {
+    async fn get_object(&self, snapshot: &SnapshotMeta, _mission: &Mission) -> Result<TransferURL> {
+        Ok(TransferURL(format!(
+            "https://github.com/{}/{}",
+            self.repo, snapshot.key
+        )))
     }
 }

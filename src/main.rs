@@ -34,9 +34,13 @@ use simple_diff_transfer::SimpleDiffTransfer;
 use structopt::StructOpt;
 
 macro_rules! index_bytes_pipe {
-    ($buffer_path: expr, $prefix: expr) => {
+    ($buffer_path: expr, $prefix: expr, $use_snapshot_last_modified: expr) => {
         |source| {
-            let source = stream_pipe::ByteStreamPipe::new(source, $buffer_path.clone().unwrap());
+            let source = stream_pipe::ByteStreamPipe::new(
+                source,
+                $buffer_path.clone().unwrap(),
+                $use_snapshot_last_modified,
+            );
             index_pipe::IndexPipe::new(
                 source,
                 $buffer_path.clone().unwrap(),
@@ -113,7 +117,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix)
+                    index_bytes_pipe!(buffer_path, prefix, false)
                 );
             }
             Source::Homebrew(source) => {
@@ -121,7 +125,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix)
+                    index_bytes_pipe!(buffer_path, prefix, false)
                 );
             }
             Source::CratesIo(source) => {
@@ -129,7 +133,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix)
+                    index_bytes_pipe!(buffer_path, prefix, false)
                 );
             }
             Source::Conda(config) => {
@@ -138,7 +142,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix)
+                    index_bytes_pipe!(buffer_path, prefix, false)
                 );
             }
             Source::Rsync(source) => {
@@ -146,7 +150,15 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix)
+                    index_bytes_pipe!(buffer_path, prefix, false)
+                );
+            }
+            Source::GithubRelease(source) => {
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix, true)
                 );
             }
         }
