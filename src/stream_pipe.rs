@@ -13,7 +13,7 @@ use chrono::DateTime;
 
 use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
-use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::traits::{Key, Metadata, SnapshotStorage, SourceStorage};
 use crate::utils::{hash_string, unix_time};
 use futures_core::Stream;
 use futures_util::{StreamExt, TryStreamExt};
@@ -75,13 +75,15 @@ pub struct ByteStream {
 pub struct ByteStreamPipe<Source> {
     pub source: Source,
     pub buffer_path: String,
+    pub use_snapshot_last_modified: bool,
 }
 
 impl<Source> ByteStreamPipe<Source> {
-    pub fn new(source: Source, buffer_path: String) -> Self {
+    pub fn new(source: Source, buffer_path: String, use_snapshot_last_modified: bool) -> Self {
         Self {
             source,
             buffer_path,
+            use_snapshot_last_modified,
         }
     }
 }
@@ -112,7 +114,7 @@ where
 #[async_trait]
 impl<Snapshot, Source> SourceStorage<Snapshot, ByteStream> for ByteStreamPipe<Source>
 where
-    Snapshot: Send + Sync + 'static,
+    Snapshot: Key + Metadata,
     Source: SourceStorage<Snapshot, TransferURL>,
 {
     async fn get_object(&self, snapshot: &Snapshot, mission: &Mission) -> Result<ByteStream> {
@@ -143,15 +145,19 @@ where
 
         let mut total_bytes: u64 = 0;
         let content_length = response.content_length();
-        let modified_at = std::str::from_utf8(
-            response
-                .headers()
-                .get(reqwest::header::LAST_MODIFIED)
-                .unwrap()
-                .as_bytes(),
-        )
-        .unwrap()
-        .to_owned();
+        let modified_at = if self.use_snapshot_last_modified {
+            snapshot.last_modified().unwrap()
+        } else {
+            let header = std::str::from_utf8(
+                response
+                    .headers()
+                    .get(reqwest::header::LAST_MODIFIED)
+                    .unwrap()
+                    .as_bytes(),
+            )
+            .unwrap();
+            DateTime::parse_from_rfc2822(&header)?.timestamp() as u64
+        };
 
         debug!(logger, "download: {} {:?}", transfer_url.0, content_length);
 
@@ -183,7 +189,7 @@ where
                 path: Some(path.into()),
             },
             length: total_bytes,
-            modified_at: DateTime::parse_from_rfc2822(&modified_at)?.timestamp() as u64,
+            modified_at,
         })
     }
 }

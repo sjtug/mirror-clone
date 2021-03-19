@@ -1,6 +1,7 @@
 use crate::conda::CondaConfig;
 use crate::crates_io::CratesIo as CratesIoConfig;
 use crate::file_backend::FileBackend;
+use crate::github_release::GitHubRelease;
 use crate::homebrew::Homebrew as HomebrewConfig;
 use crate::pypi::Pypi as PypiConfig;
 use crate::rsync::Rsync as RsyncConfig;
@@ -24,6 +25,8 @@ pub enum Source {
     Conda(CondaConfig),
     #[structopt(about = "rsync")]
     Rsync(RsyncConfig),
+    #[structopt(about = "GitHub Releases")]
+    GithubRelease(GitHubRelease),
 }
 
 #[derive(Debug)]
@@ -51,7 +54,8 @@ impl From<MirrorIntelCliConfig> for MirrorIntel {
 
 impl From<S3CliConfig> for S3Backend {
     fn from(config: S3CliConfig) -> Self {
-        let mut s3_config = crate::s3::S3Config::new_jcloud(config.s3_prefix.unwrap());
+        let mut s3_config =
+            crate::s3::S3Config::new_jcloud(config.s3_prefix.unwrap(), config.s3_scan_metadata);
         if let Some(endpoint) = config.s3_endpoint {
             s3_config.endpoint = endpoint;
         }
@@ -84,6 +88,8 @@ pub struct S3CliConfig {
     pub s3_prefix_hint_mode: Option<String>,
     #[structopt(long, help = "Max keys to list at a time", default_value = "1000")]
     pub s3_max_keys: u64,
+    #[structopt(long, help = "Scan metadata (Greatly increase requests)")]
+    pub s3_scan_metadata: bool,
 }
 
 #[derive(StructOpt, Debug, Clone)]

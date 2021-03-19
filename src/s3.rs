@@ -26,7 +26,9 @@ use crate::traits::{Key, SnapshotStorage, TargetStorage};
 use async_trait::async_trait;
 use futures_util::{stream, StreamExt};
 use rusoto_core::Region;
-use rusoto_s3::{DeleteObjectRequest, ListObjectsV2Request, PutObjectRequest, S3Client, S3};
+use rusoto_s3::{
+    DeleteObjectRequest, HeadObjectRequest, ListObjectsV2Request, PutObjectRequest, S3Client, S3,
+};
 use slog::{debug, info, warn};
 
 #[derive(Debug)]
@@ -35,17 +37,19 @@ pub struct S3Config {
     pub bucket: String,
     pub prefix: String,
     pub prefix_hint_mode: Option<String>,
+    pub scan_metadata: bool,
     pub max_keys: u64,
 }
 
 impl S3Config {
-    pub fn new_jcloud(prefix: String) -> Self {
+    pub fn new_jcloud(prefix: String, scan_metadata: bool) -> Self {
         Self {
             endpoint: "https://s3.jcloud.sjtu.edu.cn".to_string(),
             bucket: "899a892efef34b1b944a19981040f55b-oss01".to_string(),
             prefix,
             max_keys: 1000,
             prefix_hint_mode: None,
+            scan_metadata,
         }
     }
 }
@@ -105,6 +109,7 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
             }
         };
 
+        // List bucket
         let mut futures = stream::iter(prefix)
             .map(|additional_prefix| {
                 let bucket = self.config.bucket.clone();
@@ -176,6 +181,49 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
         while let Some(snapshot) = futures.next().await {
             snapshots.append(&mut snapshot?);
         }
+
+        // Get metadata
+        let snapshots = if self.config.scan_metadata {
+            let mut futures = stream::iter(snapshots)
+                .map(|snapshot| {
+                    let bucket = self.config.bucket.clone();
+                    let client = self.client.clone();
+                    let progress = progress.clone();
+                    let prefix = self.config.prefix.clone();
+
+                    async move {
+                        progress.set_message(&snapshot.key);
+                        let req = HeadObjectRequest {
+                            bucket,
+                            key: format!("{}/{}", prefix, snapshot.key),
+                            ..Default::default()
+                        };
+                        let resp = client.head_object(req).await?;
+                        let last_modified = if let Some(metadata) = resp.metadata {
+                            metadata
+                                .get("clone-last-modified")
+                                .and_then(|x| x.parse::<u64>().ok())
+                        } else {
+                            None
+                        };
+                        Ok::<_, Error>(SnapshotMeta {
+                            last_modified,
+                            ..snapshot
+                        })
+                    }
+                })
+                .buffer_unordered(64);
+
+            let mut snapshots = vec![];
+
+            while let Some(snapshot) = futures.next().await {
+                snapshots.push(snapshot?);
+            }
+
+            snapshots
+        } else {
+            snapshots
+        };
 
         progress.finish_with_message("done");
 
