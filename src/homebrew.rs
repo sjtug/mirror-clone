@@ -80,11 +80,11 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
             .filter_map(|url| url.as_str())
             .filter(|url| self.arch.is_empty() || self.arch == "all" || url.contains(&self.arch))
             .map(|url| url.to_string())
-            .filter_map(|url| {
+            .map(|url| {
                 if url.starts_with(&bottles_base) {
-                    Some(url[bottles_base.len()..].to_string())
+                    url[bottles_base.len()..].to_string()
                 } else {
-                    None
+                    panic!("unsupported homebrew base");
                 }
             })
             .map(|url| crate::utils::rewrite_url_string(&gen_map, &url))
