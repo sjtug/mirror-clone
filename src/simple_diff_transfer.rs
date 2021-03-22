@@ -42,6 +42,7 @@ pub struct SimpleDiffTransferConfig {
     pub progress: bool,
     pub concurrent_transfer: usize,
     pub no_delete: bool,
+    pub dry_run: bool,
     pub snapshot_config: SnapshotConfig,
     pub print_plan: usize,
 }
@@ -253,6 +254,10 @@ where
             updates.len(),
             deletions.len()
         );
+
+        if self.config.dry_run {
+            return Ok(());
+        }
 
         info!(logger, "updating objects");
 

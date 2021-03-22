@@ -127,6 +127,8 @@ pub struct TransferConfig {
     pub concurrent_transfer: usize,
     #[structopt(long, help = "Don't delete files")]
     pub no_delete: bool,
+    #[structopt(long, help = "Enable dry run mode")]
+    pub dry_run: bool,
     #[structopt(
         long,
         help = "Print first n records of transfer plan",
