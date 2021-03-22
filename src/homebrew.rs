@@ -84,7 +84,7 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
                 if url.starts_with(&bottles_base) {
                     url[bottles_base.len()..].to_string()
                 } else {
-                    panic!("unsupported homebrew base");
+                    panic!("Bottles URL doens't begin with its base: {:?}", url);
                 }
             })
             .map(|url| crate::utils::rewrite_url_string(&gen_map, &url))

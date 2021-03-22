@@ -126,11 +126,11 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
         let snapshot = packages?
             .into_iter()
             .flatten()
-            .filter_map(|(url, _)| {
+            .map(|(url, _)| {
                 if url.starts_with(&package_base) {
-                    Some(url[package_base.len()..].to_string())
+                    url[package_base.len()..].to_string()
                 } else {
-                    None
+                    panic!("PyPI package isn't stored on base: {:?}", url);
                 }
             })
             .collect();
