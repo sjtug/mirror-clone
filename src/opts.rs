@@ -1,5 +1,6 @@
 use crate::conda::CondaConfig;
 use crate::crates_io::CratesIo as CratesIoConfig;
+use crate::dart::Dart;
 use crate::file_backend::FileBackend;
 use crate::github_release::GitHubRelease;
 use crate::homebrew::Homebrew as HomebrewConfig;
@@ -27,6 +28,8 @@ pub enum Source {
     Rsync(RsyncConfig),
     #[structopt(about = "GitHub Releases")]
     GithubRelease(GitHubRelease),
+    #[structopt(about = "dart pub.dev")]
+    DartPub(Dart),
 }
 
 #[derive(Debug)]

@@ -162,6 +162,14 @@ fn main() {
                     index_bytes_pipe!(buffer_path, prefix, true)
                 );
             }
+            Source::DartPub(source) => {
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix, false)
+                );
+            }
         }
     });
 }

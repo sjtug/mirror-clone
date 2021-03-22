@@ -81,7 +81,11 @@ impl SnapshotStorage<SnapshotMeta> for GitHubRelease {
             .take(self.version_to_retain)
             .flatten()
             .map(|asset| SnapshotMeta {
-                key: asset.browser_download_url.replace(&replace_string, ""),
+                key: if asset.browser_download_url.starts_with(&replace_string) {
+                    asset.browser_download_url[replace_string.len()..].to_string()
+                } else {
+                    panic!("Unmatched base URL: {:?}", asset)
+                },
                 size: Some(asset.size),
                 last_modified: Some(asset.updated_at.timestamp() as u64),
                 ..Default::default()
