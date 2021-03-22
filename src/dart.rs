@@ -1,25 +1,29 @@
-use crate::common::{Mission, SnapshotConfig, SnapshotPath};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
 use crate::error::{Error, Result};
-use crate::traits::SnapshotStorage;
+use crate::metadata::SnapshotMeta;
+use crate::traits::{SnapshotStorage, SourceStorage};
 
 use async_trait::async_trait;
 use futures_util::{stream, StreamExt, TryStreamExt};
 use serde_json::Value;
 use slog::{info, warn};
+use structopt::StructOpt;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, StructOpt)]
 pub struct Dart {
+    #[structopt(long, default_value = "https://mirrors.tuna.tsinghua.edu.cn/dart-pub")]
     pub base: String,
+    #[structopt(long)]
     pub debug: bool,
 }
 
 #[async_trait]
-impl SnapshotStorage<SnapshotPath> for Dart {
+impl SnapshotStorage<SnapshotMeta> for Dart {
     async fn snapshot(
         &mut self,
         mission: Mission,
         config: &SnapshotConfig,
-    ) -> Result<Vec<SnapshotPath>> {
+    ) -> Result<Vec<SnapshotMeta>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -66,7 +70,7 @@ impl SnapshotStorage<SnapshotPath> for Dart {
 
         progress.inc_length(package_name.len() as u64);
 
-        let snapshots: Result<Vec<Vec<String>>> =
+        let snapshots: Result<Vec<Vec<SnapshotMeta>>> =
             stream::iter(package_name.into_iter().map(|name| {
                 let client = client.clone();
                 let base = format!("{}/", self.base);
@@ -84,15 +88,24 @@ impl SnapshotStorage<SnapshotPath> for Dart {
 
                     let data: Value = serde_json::from_str(&package).unwrap();
                     let versions = data.get("versions").unwrap().as_array().unwrap();
-                    let archives: Vec<String> = versions
+                    let archives: Vec<SnapshotMeta> = versions
                         .iter()
                         .filter_map(|version| version.get("archive_url"))
                         .filter_map(|archive_url| archive_url.as_str())
-                        .map(|archive_url| archive_url.replace(&base, ""))
+                        .map(|archive_url| {
+                            if archive_url.starts_with(&base) {
+                                SnapshotMeta {
+                                    key: archive_url[base.len()..].to_string(),
+                                    ..Default::default()
+                                }
+                            } else {
+                                panic!("Unmatched base URL {}", archive_url);
+                            }
+                        })
                         .collect();
 
                     progress.inc(1);
-                    Ok::<Vec<String>, Error>(archives)
+                    Ok::<Vec<SnapshotMeta>, Error>(archives)
                 };
                 async move {
                     match func.await {
@@ -112,10 +125,17 @@ impl SnapshotStorage<SnapshotPath> for Dart {
 
         progress.finish_with_message("done");
 
-        Ok(crate::utils::snapshot_string_to_path(snapshot))
+        Ok(snapshot)
     }
 
     fn info(&self) -> String {
         format!("dart, {:?}", self)
+    }
+}
+
+#[async_trait]
+impl SourceStorage<SnapshotMeta, TransferURL> for Dart {
+    async fn get_object(&self, snapshot: &SnapshotMeta, _mission: &Mission) -> Result<TransferURL> {
+        Ok(TransferURL(format!("{}/{}", self.base, snapshot.key)))
     }
 }
