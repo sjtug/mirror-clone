@@ -130,7 +130,7 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
                 if url.starts_with(&package_base) {
                     Some(url[package_base.len()..].to_string())
                 } else {
-                    None
+                    panic!("PyPI package isn't stored on base: {:?}", url);
                 }
             })
             .collect();
