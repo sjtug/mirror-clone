@@ -1,4 +1,4 @@
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
+use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
 use crate::metadata::SnapshotMeta;
 use crate::traits::{SnapshotStorage, SourceStorage};

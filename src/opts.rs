@@ -9,7 +9,6 @@ use crate::rsync::Rsync as RsyncConfig;
 
 use crate::{
     error::{Error, Result},
-    mirror_intel::MirrorIntel,
     s3::S3Backend,
 };
 use structopt::StructOpt;
@@ -34,25 +33,8 @@ pub enum Source {
 
 #[derive(Debug)]
 pub enum Target {
-    Intel,
     S3,
     File,
-}
-
-#[derive(StructOpt, Debug, Clone)]
-pub struct MirrorIntelCliConfig {
-    #[structopt(
-        long,
-        required_if("target_type", "intel"),
-        help = "Base URL for mirror-intel backend"
-    )]
-    pub mirror_intel_base: Option<String>,
-}
-
-impl From<MirrorIntelCliConfig> for MirrorIntel {
-    fn from(config: MirrorIntelCliConfig) -> Self {
-        MirrorIntel::new(config.mirror_intel_base.unwrap())
-    }
 }
 
 impl From<S3CliConfig> for S3Backend {
@@ -116,7 +98,6 @@ impl std::str::FromStr for Target {
 
     fn from_str(s: &str) -> Result<Self> {
         match s {
-            "intel" => Ok(Self::Intel),
             "s3" => Ok(Self::S3),
             "file" => Ok(Self::File),
             _ => Err(Error::ConfigureError("unsupported target".to_string())),
@@ -147,8 +128,6 @@ pub struct Opts {
     pub source: Source,
     #[structopt(long, help = "Target to use")]
     pub target_type: Target,
-    #[structopt(flatten)]
-    pub mirror_intel_config: MirrorIntelCliConfig,
     #[structopt(flatten)]
     pub s3_config: S3CliConfig,
     #[structopt(flatten)]
