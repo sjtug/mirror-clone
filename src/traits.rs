@@ -1,4 +1,4 @@
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferPath};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath};
 use crate::error::Result;
 use async_trait::async_trait;
 
@@ -26,17 +26,6 @@ pub trait TargetStorage<SnapshotItem, TargetItem>: Send + Sync + 'static {
         mission: &Mission,
     ) -> Result<()>;
     async fn delete_object(&self, snapshot: &SnapshotItem, mission: &Mission) -> Result<()>;
-}
-
-#[async_trait]
-impl<Source, Snapshot> SourceStorage<Snapshot, TransferPath> for Source
-where
-    Source: SnapshotStorage<Snapshot>,
-    Snapshot: Key,
-{
-    async fn get_object(&self, snapshot: &Snapshot, _mission: &Mission) -> Result<TransferPath> {
-        Ok(TransferPath(snapshot.key().to_string()))
-    }
 }
 
 pub trait Key: Send + Sync + 'static {

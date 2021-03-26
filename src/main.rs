@@ -12,7 +12,6 @@ mod homebrew;
 mod html_scanner;
 mod index_pipe;
 mod metadata;
-mod mirror_intel;
 mod opts;
 mod pypi;
 mod rewrite_pipe;
@@ -27,7 +26,6 @@ mod utils;
 
 use common::SnapshotConfig;
 use file_backend::FileBackend;
-use mirror_intel::MirrorIntel;
 use opts::{Source, Target};
 use s3::S3Backend;
 use simple_diff_transfer::SimpleDiffTransfer;
@@ -53,11 +51,6 @@ macro_rules! index_bytes_pipe {
 macro_rules! transfer {
     ($opts: expr, $source: expr, $transfer_config: expr, $pipes: expr) => {
         match $opts.target_type {
-            Target::Intel => {
-                let target: MirrorIntel = $opts.mirror_intel_config.into();
-                let transfer = SimpleDiffTransfer::new($source, target, $transfer_config);
-                transfer.transfer().await.unwrap();
-            }
             Target::S3 => {
                 let target: S3Backend = $opts.s3_config.clone().into();
                 let pipes = $pipes;

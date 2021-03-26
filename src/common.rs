@@ -27,7 +27,4 @@ impl SnapshotPath {
 }
 
 #[derive(Debug)]
-pub struct TransferPath(pub String);
-
-#[derive(Debug)]
 pub struct TransferURL(pub String);
