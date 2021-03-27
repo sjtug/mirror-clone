@@ -14,6 +14,8 @@ pub struct MergePipe<Source1, Source2> {
 
 impl<Source1, Source2> MergePipe<Source1, Source2> {
     pub fn new(s1: Source1, s2: Source2, s1_prefix: String, s2_prefix: Option<String>) -> Self {
+        let s1_prefix = if s1_prefix.ends_with('/') {s1_prefix} else {format!("{}/", s1_prefix)};
+        let s2_prefix = s2_prefix.map(|prefix| if prefix.ends_with('/') {prefix} else {format!("{}/", prefix)});
         Self {
             s1,
             s2,
@@ -40,7 +42,7 @@ where
         info!(logger, "merge_pipe: snapshotting {}", self.s1_prefix);
         let mut snapshot1 = self.s1.snapshot(mission.clone(), config).await?;
         snapshot1.iter_mut().for_each(|item| {
-            *item.key_mut() = format!("{}/{}", self.s1_prefix, item.key());
+            *item.key_mut() = format!("{}{}", self.s1_prefix, item.key());
         });
 
         if let Some(prefix) = &self.s2_prefix {
@@ -51,7 +53,7 @@ where
         let mut snapshot2 = self.s2.snapshot(mission.clone(), config).await?;
         if let Some(prefix) = &self.s2_prefix {
             snapshot2.iter_mut().for_each(|item| {
-                *item.key_mut() = format!("{}/{}", prefix, item.key());
+                *item.key_mut() = format!("{}{}", prefix, item.key());
             });
         }
 
@@ -76,12 +78,12 @@ where
     async fn get_object(&self, snapshot: &SnapshotItem, mission: &Mission) -> Result<Source> {
         let path = snapshot.key();
 
-        if let Some(key) = path.strip_prefix(format!("{}/", self.s1_prefix).as_str()) {
+        if let Some(key) = path.strip_prefix(&self.s1_prefix) {
             let mut snapshot = snapshot.clone();
             *snapshot.key_mut() = String::from(key);
             self.s1.get_object(&snapshot, mission).await
         } else if let Some(prefix) = &self.s2_prefix {
-            if let Some(key) = path.strip_prefix(format!("{}/", prefix).as_str()) {
+            if let Some(key) = path.strip_prefix(prefix) {
                 let mut snapshot = snapshot.clone();
                 *snapshot.key_mut() = String::from(key);
                 self.s2.get_object(&snapshot, mission).await
