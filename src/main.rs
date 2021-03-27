@@ -58,7 +58,7 @@ macro_rules! index_bytes_pipe {
 macro_rules! id_pipe {
     () => {
         |src| src
-    }
+    };
 }
 
 macro_rules! transfer {
@@ -204,18 +204,17 @@ fn main() {
                     999999,
                 );
 
-                let yaml_rewrite_fn =
-                    move |src: String| -> Result<String> {
-                        Ok(src
-                            .replace(
-                                HASKELL_URL,
-                                Path::new(&target_mirror).join("packages").to_str().unwrap(),
-                            )
-                            .replace(
-                                HLS_URL,
-                                Path::new(&target_mirror).join("hls").to_str().unwrap(),
-                            ))
-                    };
+                let yaml_rewrite_fn = move |src: String| -> Result<String> {
+                    Ok(src
+                        .replace(
+                            HASKELL_URL,
+                            Path::new(&target_mirror).join("packages").to_str().unwrap(),
+                        )
+                        .replace(
+                            HLS_URL,
+                            Path::new(&target_mirror).join("hls").to_str().unwrap(),
+                        ))
+                };
                 let yaml_src = rewrite_pipe::RewritePipe::new(
                     stream_pipe::ByteStreamPipe::new(
                         source.get_yaml(),

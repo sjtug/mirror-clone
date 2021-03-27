@@ -1,5 +1,6 @@
-use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
+
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]

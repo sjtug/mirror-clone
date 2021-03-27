@@ -1,11 +1,13 @@
-use super::utils::{get_last_modified, get_yaml_url};
+use async_trait::async_trait;
+use slog::info;
+use structopt::StructOpt;
+
 use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::Result;
 use crate::metadata::SnapshotMeta;
 use crate::traits::{SnapshotStorage, SourceStorage};
-use async_trait::async_trait;
-use slog::info;
-use structopt::StructOpt;
+
+use super::utils::{get_last_modified, get_yaml_url};
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct GhcupYaml {

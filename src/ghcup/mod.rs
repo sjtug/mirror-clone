@@ -18,19 +18,19 @@
 //!
 //! Do not forget to apply rewrite_pipe to `GhcupConfig` and `GhcupScript`.
 
-mod hls;
-mod packages;
-mod parser;
-mod script;
-mod utils;
-mod yaml;
-
 use structopt::StructOpt;
 
 use crate::ghcup::hls::GhcupHLS;
 use crate::ghcup::packages::GhcupPackages;
 use crate::ghcup::script::GhcupScript;
 use crate::ghcup::yaml::GhcupYaml;
+
+mod hls;
+mod packages;
+mod parser;
+mod script;
+mod utils;
+mod yaml;
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct Ghcup {

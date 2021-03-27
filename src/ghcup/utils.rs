@@ -1,6 +1,7 @@
-use crate::error::{Error, Result};
 use chrono::DateTime;
 use reqwest::Client;
+
+use crate::error::{Error, Result};
 
 pub async fn get_yaml_url<'a>(base_url: &'a str, client: &'a Client) -> Result<String> {
     let version_matcher = regex::Regex::new("ghcupURL.*(?P<url>https://.*yaml)").unwrap();
