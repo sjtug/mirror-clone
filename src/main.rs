@@ -1,5 +1,17 @@
 #![deny(clippy::all)]
 
+use std::path::Path;
+
+use lazy_static::lazy_static;
+use structopt::StructOpt;
+
+use common::SnapshotConfig;
+use error::Result;
+use file_backend::FileBackend;
+use opts::{Source, Target};
+use s3::S3Backend;
+use simple_diff_transfer::SimpleDiffTransfer;
+
 mod common;
 mod conda;
 mod crates_io;
@@ -26,14 +38,6 @@ mod timeout;
 mod traits;
 mod utils;
 
-use common::SnapshotConfig;
-use file_backend::FileBackend;
-use lazy_static::lazy_static;
-use opts::{Source, Target};
-use s3::S3Backend;
-use simple_diff_transfer::SimpleDiffTransfer;
-use structopt::StructOpt;
-
 macro_rules! index_bytes_pipe {
     ($buffer_path: expr, $prefix: expr, $use_snapshot_last_modified: expr) => {
         |source| {
@@ -49,6 +53,12 @@ macro_rules! index_bytes_pipe {
             )
         }
     };
+}
+
+macro_rules! id_pipe {
+    () => {
+        |src| src
+    }
 }
 
 macro_rules! transfer {
@@ -76,6 +86,8 @@ lazy_static! {
     static ref HASKELL_PATTERN: regex::Regex =
         regex::Regex::new("https://downloads.haskell.org").unwrap();
 }
+const HLS_URL: &str = "https://github.com/haskell/haskell-language-server/releases/download";
+const HASKELL_URL: &str = "https://downloads.haskell.org";
 
 fn main() {
     let opts: opts::Opts = opts::Opts::from_args();
@@ -172,11 +184,38 @@ fn main() {
                 );
             }
             Source::Ghcup(source) => {
-                let script_src = stream_pipe::ByteStreamPipe::new(
-                    source.get_script(),
+                let target_mirror = source.target_mirror.clone();
+
+                let script_src = rewrite_pipe::RewritePipe::new(
+                    stream_pipe::ByteStreamPipe::new(
+                        source.get_script(),
+                        buffer_path.clone().unwrap(),
+                        true,
+                    ),
                     buffer_path.clone().unwrap(),
-                    true,
+                    utils::fn_regex_rewrite(
+                        &HASKELL_PATTERN,
+                        Path::new(&target_mirror)
+                            .join("packages")
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
+                    ),
+                    999999,
                 );
+
+                let yaml_rewrite_fn =
+                    move |src: String| -> Result<String> {
+                        Ok(src
+                            .replace(
+                                HASKELL_URL,
+                                Path::new(&target_mirror).join("packages").to_str().unwrap(),
+                            )
+                            .replace(
+                                HLS_URL,
+                                Path::new(&target_mirror).join("hls").to_str().unwrap(),
+                            ))
+                    };
                 let yaml_src = rewrite_pipe::RewritePipe::new(
                     stream_pipe::ByteStreamPipe::new(
                         source.get_yaml(),
@@ -184,36 +223,46 @@ fn main() {
                         true,
                     ),
                     buffer_path.clone().unwrap(),
-                    utils::fn_regex_rewrite(&HASKELL_PATTERN, source.target_mirror.clone()),
+                    yaml_rewrite_fn,
                     999999,
                 );
-                let packages_src = rewrite_pipe::RewritePipe::new(
-                    stream_pipe::ByteStreamPipe::new(
-                        source.get_packages(),
-                        buffer_path.clone().unwrap(),
-                        false,
-                    ),
+
+                let packages_src = stream_pipe::ByteStreamPipe::new(
+                    source.get_packages(),
                     buffer_path.clone().unwrap(),
-                    utils::fn_regex_rewrite(&HASKELL_PATTERN, source.target_mirror.clone()),
-                    999999,
+                    false,
                 );
+
+                let hls_src = stream_pipe::ByteStreamPipe::new(
+                    source.get_hls(),
+                    buffer_path.clone().unwrap(),
+                    false,
+                );
+
                 let unified = merge_pipe::MergePipe::new(
-                    script_src,
+                    packages_src,
                     merge_pipe::MergePipe::new(
-                        yaml_src,
-                        packages_src,
-                        String::from("yaml"),
-                        Some(String::from("packages")),
+                        hls_src,
+                        merge_pipe::MergePipe::new(
+                            yaml_src,
+                            script_src,
+                            String::from("yaml"),
+                            Some(String::from("script")),
+                        ),
+                        String::from("hls"),
+                        None,
                     ),
-                    String::from("script"),
+                    String::from("packages"),
                     None,
                 );
+
                 let indexed = index_pipe::IndexPipe::new(
                     unified,
                     buffer_path.clone().unwrap(),
                     prefix.clone().unwrap(),
                 );
-                transfer!(opts, indexed, transfer_config, |item| { item });
+
+                transfer!(opts, indexed, transfer_config, id_pipe!());
             }
         }
     });

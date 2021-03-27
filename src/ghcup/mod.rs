@@ -18,6 +18,7 @@
 //!
 //! Do not forget to apply rewrite_pipe to `GhcupConfig` and `GhcupScript`.
 
+mod hls;
 mod packages;
 mod parser;
 mod script;
@@ -26,6 +27,7 @@ mod yaml;
 
 use structopt::StructOpt;
 
+use crate::ghcup::hls::GhcupHLS;
 use crate::ghcup::packages::GhcupPackages;
 use crate::ghcup::script::GhcupScript;
 use crate::ghcup::yaml::GhcupYaml;
@@ -63,6 +65,12 @@ impl Ghcup {
         GhcupPackages {
             ghcup_base: self.ghcup_base.clone(),
             include_old_versions: self.include_old_versions,
+        }
+    }
+
+    pub fn get_hls(&self) -> GhcupHLS {
+        GhcupHLS {
+            ghcup_base: self.ghcup_base.clone(),
         }
     }
 }
