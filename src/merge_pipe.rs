@@ -1,3 +1,13 @@
+//! MergePipe merge several sources into one.
+//!
+//! Sometimes it may not be sufficient to mirror the whole repository from
+//! a single site (e.g. ghcup).
+//! In such case, several different sources of distinct base urls can be
+//! implemented, and they should be unified by `MergePipe` later.
+//!
+//! You may use `MergePipe` recursively if you have more than two sources
+//! to merge by setting the second prefix as `None`.
+
 use async_trait::async_trait;
 use slog::info;
 
