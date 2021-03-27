@@ -34,25 +34,6 @@ use s3::S3Backend;
 use simple_diff_transfer::SimpleDiffTransfer;
 use structopt::StructOpt;
 
-macro_rules! index_rewrite_bytes_pipe {
-    ($buffer_path: expr, $prefix: expr, $use_snapshot_last_modified: expr, $pattern: expr, $target: expr, $maxlen: expr) => {
-        |source| {
-            let source = stream_pipe::ByteStreamPipe::new(source, $buffer_path.clone().unwrap(), $use_snapshot_last_modified);
-            let source = rewrite_pipe::RewritePipe::new(
-                source,
-                $buffer_path.clone().unwrap(),
-                utils::fn_regex_rewrite($pattern, $target),
-                $maxlen,
-            );
-            index_pipe::IndexPipe::new(
-                source,
-                $buffer_path.clone().unwrap(),
-                $prefix.clone().unwrap(),
-            )
-        }
-    };
-}
-
 macro_rules! index_bytes_pipe {
     ($buffer_path: expr, $prefix: expr, $use_snapshot_last_modified: expr) => {
         |source| {
@@ -191,44 +172,48 @@ fn main() {
                 );
             }
             Source::Ghcup(source) => {
-                transfer!(
-                    opts,
-                    source,
-                    transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, true)
+                let script_src = stream_pipe::ByteStreamPipe::new(
+                    source.get_script(),
+                    buffer_path.clone().unwrap(),
+                    true,
                 );
-            }
-            Source::GhcupYaml(source) => {
-                let target = source.target_mirror.trim_end_matches('/').to_string();
-                transfer!(
-                    opts,
-                    source,
-                    transfer_config,
-                    index_rewrite_bytes_pipe!(
-                        buffer_path,
-                        prefix,
+                let yaml_src = rewrite_pipe::RewritePipe::new(
+                    stream_pipe::ByteStreamPipe::new(
+                        source.get_yaml(),
+                        buffer_path.clone().unwrap(),
                         true,
-                        &HASKELL_PATTERN,
-                        target,
-                        999999
-                    )
+                    ),
+                    buffer_path.clone().unwrap(),
+                    utils::fn_regex_rewrite(&HASKELL_PATTERN, source.target_mirror.clone()),
+                    999999,
                 );
-            }
-            Source::GhcupScript(source) => {
-                let target = source.target_mirror.trim_end_matches('/').to_string();
-                transfer!(
-                    opts,
-                    source,
-                    transfer_config,
-                    index_rewrite_bytes_pipe!(
-                        buffer_path,
-                        prefix,
-                        true,
-                        &HASKELL_PATTERN,
-                        target,
-                        999999
-                    )
+                let packages_src = rewrite_pipe::RewritePipe::new(
+                    stream_pipe::ByteStreamPipe::new(
+                        source.get_packages(),
+                        buffer_path.clone().unwrap(),
+                        false,
+                    ),
+                    buffer_path.clone().unwrap(),
+                    utils::fn_regex_rewrite(&HASKELL_PATTERN, source.target_mirror.clone()),
+                    999999,
                 );
+                let unified = merge_pipe::MergePipe::new(
+                    script_src,
+                    merge_pipe::MergePipe::new(
+                        yaml_src,
+                        packages_src,
+                        String::from("yaml"),
+                        Some(String::from("packages")),
+                    ),
+                    String::from("script"),
+                    None,
+                );
+                let indexed = index_pipe::IndexPipe::new(
+                    unified,
+                    buffer_path.clone().unwrap(),
+                    prefix.clone().unwrap(),
+                );
+                transfer!(opts, indexed, transfer_config, |item| { item });
             }
         }
     });

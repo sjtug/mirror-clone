@@ -4,6 +4,7 @@ use slog::{o, Drain};
 
 use crate::common::SnapshotPath;
 use crate::error::Result;
+use crate::metadata::SnapshotMeta;
 
 pub fn create_logger() -> slog::Logger {
     let decorator = slog_term::TermDecorator::new().build();
@@ -30,6 +31,10 @@ pub fn bar() -> ProgressStyle {
 
 pub fn snapshot_string_to_path(snapshot: Vec<String>) -> Vec<SnapshotPath> {
     snapshot.into_iter().map(SnapshotPath::new).collect()
+}
+
+pub fn snapshot_string_to_meta(snapshot: Vec<String>) -> Vec<SnapshotMeta> {
+    snapshot.into_iter().map(SnapshotMeta::new).collect()
 }
 
 pub fn user_agent() -> String {
