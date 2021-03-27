@@ -62,6 +62,10 @@ impl Key for SnapshotMeta {
     fn key(&self) -> &str {
         &self.key
     }
+
+    fn key_mut(&mut self) -> &mut String {
+        &mut self.key
+    }
 }
 
 fn compare_option<T: Eq>(a: &Option<T>, b: &Option<T>) -> bool {
