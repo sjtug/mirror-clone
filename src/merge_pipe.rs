@@ -10,11 +10,11 @@ pub struct MergePipe<Source1, Source2> {
     s1: Source1,
     s2: Source2,
     s1_prefix: String,
-    s2_prefix: String,
+    s2_prefix: Option<String>,
 }
 
 impl<Source1, Source2> MergePipe<Source1, Source2> {
-    pub fn new(s1: Source1, s2: Source2, s1_prefix: String, s2_prefix: String) -> Self {
+    pub fn new(s1: Source1, s2: Source2, s1_prefix: String, s2_prefix: Option<String>) -> Self {
         Self {
             s1,
             s2,
@@ -44,9 +44,11 @@ where
         });
         info!(logger, "iterating the second source");
         let mut snapshot2 = self.s2.snapshot(mission.clone(), config).await?;
-        snapshot2.iter_mut().for_each(|item| {
-            item.0 = format!("{}/{}", self.s2_prefix, item.0);
-        });
+        if let Some(prefix) = &self.s2_prefix {
+            snapshot2.iter_mut().for_each(|item| {
+                item.0 = format!("{}/{}", prefix, item.0);
+            });
+        }
 
         snapshot1.append(&mut snapshot2);
 
@@ -78,9 +80,11 @@ where
         });
         info!(logger, "iterating the second source");
         let mut snapshot2 = self.s2.snapshot(mission.clone(), config).await?;
-        snapshot2.iter_mut().for_each(|item| {
-            item.key = format!("{}/{}", self.s2_prefix, item.key);
-        });
+        if let Some(prefix) = &self.s2_prefix {
+            snapshot2.iter_mut().for_each(|item| {
+                item.key = format!("{}/{}", prefix, item.key);
+            });
+        }
 
         snapshot1.append(&mut snapshot2);
 
@@ -100,14 +104,22 @@ where
     Source2: SourceStorage<SnapshotPath, Source> + Send + 'static,
 {
     async fn get_object(&self, snapshot: &SnapshotPath, mission: &Mission) -> Result<Source> {
-        if let Some(key) = snapshot.0.strip_prefix(format!("{}/", self.s1_prefix).as_str()) {
+        let SnapshotPath(path, force) = snapshot;
+
+        if let Some(key) = path.strip_prefix(format!("{}/", self.s1_prefix).as_str()) {
             self.s1
-                .get_object(&SnapshotPath(String::from(key), snapshot.1), mission).await
-        } else if let Some(key) = snapshot.0.strip_prefix(format!("{}/", self.s2_prefix).as_str()) {
-            self.s2
-                .get_object(&SnapshotPath(String::from(key), snapshot.1), mission).await
+                .get_object(&SnapshotPath(String::from(key), *force), mission)
+                .await
+        } else if let Some(prefix) = &self.s2_prefix {
+            if let Some(key) = path.strip_prefix(format!("{}/", prefix).as_str()) {
+                self.s2
+                    .get_object(&SnapshotPath(String::from(key), *force), mission)
+                    .await
+            } else {
+                Err(Error::PipeError(String::from("unexpected prefix")))
+            }
         } else {
-            Err(Error::PipeError(String::from("unexpected prefix")))
+            self.s2.get_object(snapshot, mission).await
         }
     }
 }
@@ -120,16 +132,22 @@ where
     Source2: SourceStorage<SnapshotMeta, Source> + Send + 'static,
 {
     async fn get_object(&self, snapshot: &SnapshotMeta, mission: &Mission) -> Result<Source> {
-        if let Some(key) = snapshot.key.strip_prefix(format!("{}/", self.s1_prefix).as_str()) {
+        let path = &snapshot.key;
+
+        if let Some(key) = path.strip_prefix(format!("{}/", self.s1_prefix).as_str()) {
             let mut snapshot = snapshot.clone();
             snapshot.key = String::from(key);
             self.s1.get_object(&snapshot, mission).await
-        } else if let Some(key) = snapshot.key.strip_prefix(format!("{}/", self.s2_prefix).as_str()) {
-            let mut snapshot = snapshot.clone();
-            snapshot.key = String::from(key);
-            self.s2.get_object(&snapshot, mission).await
+        } else if let Some(prefix) = &self.s2_prefix {
+            if let Some(key) = path.strip_prefix(format!("{}/", prefix).as_str()) {
+                let mut snapshot = snapshot.clone();
+                snapshot.key = String::from(key);
+                self.s2.get_object(&snapshot, mission).await
+            } else {
+                Err(Error::PipeError(String::from("unexpected prefix")))
+            }
         } else {
-            Err(Error::PipeError(String::from("unexpected prefix")))
+            self.s2.get_object(snapshot, mission).await
         }
     }
 }
