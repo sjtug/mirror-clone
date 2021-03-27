@@ -37,12 +37,17 @@ where
     ) -> Result<Vec<SnapshotItem>> {
         let logger = mission.logger.clone();
 
-        info!(logger, "iterating the first source");
+        info!(logger, "merge_pipe: snapshotting {}", self.s1_prefix);
         let mut snapshot1 = self.s1.snapshot(mission.clone(), config).await?;
         snapshot1.iter_mut().for_each(|item| {
             *item.key_mut() = format!("{}/{}", self.s1_prefix, item.key());
         });
-        info!(logger, "iterating the second source");
+
+        if let Some(prefix) = &self.s2_prefix {
+            info!(logger, "merge_pipe: snapshotting {}", prefix);
+        } else {
+            info!(logger, "merge_pipe: snapshotting remaining source(s)");
+        }
         let mut snapshot2 = self.s2.snapshot(mission.clone(), config).await?;
         if let Some(prefix) = &self.s2_prefix {
             snapshot2.iter_mut().for_each(|item| {
