@@ -30,6 +30,8 @@ pub trait TargetStorage<SnapshotItem, TargetItem>: Send + Sync + 'static {
 
 pub trait Key: Send + Sync + 'static {
     fn key(&self) -> &str;
+
+    fn key_mut(&mut self) -> &mut String;
 }
 
 pub trait Metadata {
@@ -49,6 +51,10 @@ pub trait Diff {
 impl Key for SnapshotPath {
     fn key(&self) -> &str {
         &self.0
+    }
+
+    fn key_mut(&mut self) -> &mut String {
+        &mut self.0
     }
 }
 

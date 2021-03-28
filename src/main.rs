@@ -11,6 +11,7 @@ mod gradle;
 mod homebrew;
 mod html_scanner;
 mod index_pipe;
+mod merge_pipe;
 mod metadata;
 mod opts;
 mod pypi;
