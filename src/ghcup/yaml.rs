@@ -16,8 +16,6 @@ pub struct GhcupYaml {
         default_value = "https://gitlab.haskell.org/haskell/ghcup-hs/-/raw/master/"
     )]
     pub ghcup_base: String,
-    #[structopt(long, help = "mirror url for packages")]
-    pub target_mirror: String,
 }
 
 #[async_trait]

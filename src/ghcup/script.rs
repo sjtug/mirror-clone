@@ -13,8 +13,6 @@ use super::utils::get_last_modified;
 pub struct GhcupScript {
     #[structopt(long, default_value = "https://get-ghcup.haskell.org/")]
     pub script_url: String,
-    #[structopt(long, help = "mirror url for packages")]
-    pub target_mirror: String,
 }
 
 #[async_trait]

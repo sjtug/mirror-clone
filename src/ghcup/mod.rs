@@ -52,13 +52,11 @@ impl Ghcup {
     pub fn get_script(&self) -> GhcupScript {
         GhcupScript {
             script_url: self.script_url.clone(),
-            target_mirror: self.target_mirror.clone(),
         }
     }
     pub fn get_yaml(&self) -> GhcupYaml {
         GhcupYaml {
             ghcup_base: self.ghcup_base.clone(),
-            target_mirror: self.target_mirror.clone(),
         }
     }
     pub fn get_packages(&self) -> GhcupPackages {
