@@ -11,6 +11,7 @@ use file_backend::FileBackend;
 use opts::{Source, Target};
 use s3::S3Backend;
 use simple_diff_transfer::SimpleDiffTransfer;
+use crate::github_release::GitHubRelease;
 
 mod common;
 mod conda;
@@ -86,7 +87,7 @@ lazy_static! {
     static ref HASKELL_PATTERN: regex::Regex =
         regex::Regex::new("https://downloads.haskell.org").unwrap();
 }
-const HLS_URL: &str = "https://github.com/haskell/haskell-language-server/releases/download";
+const HLS_URL: &str = "https://github.com/haskell/haskell-language-server";
 const HASKELL_URL: &str = "https://downloads.haskell.org";
 
 fn main() {
@@ -231,11 +232,10 @@ fn main() {
                     buffer_path.clone().unwrap(),
                     false,
                 );
-
                 let hls_src = stream_pipe::ByteStreamPipe::new(
-                    source.get_hls(),
+                    GitHubRelease::new(String::from("haskell/haskell-language-server"), source.retain_hls_versions),
                     buffer_path.clone().unwrap(),
-                    false,
+                    true
                 );
 
                 let unified = merge_pipe::MergePipe::new(

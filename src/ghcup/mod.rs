@@ -8,24 +8,21 @@
 //! its config, and capture all files located at downloads.haskell.org.
 //! All item inside it is immutable.
 //!
-//! `GhcupHLS` source provides HLS packages hosted on Github. All item inside
-//! it is immutable.
-//!
 //! `GhcupConfig` fetches ghcup config.
 //!
 //! `GhcupScript` fetches ghcup installation script.
 //!
+//! It's recommended to mirror HLS packages using `GithubRelease` source.
+//!
 //! Do not forget to apply rewrite_pipe to `GhcupConfig` and `GhcupScript`.
-//! You may want to merge four sources into one using `MergePipe`.
+//! You may want to merge three (or four) sources into one using `MergePipe`.
 
 use structopt::StructOpt;
 
-use crate::ghcup::hls::GhcupHLS;
 use crate::ghcup::packages::GhcupPackages;
 use crate::ghcup::script::GhcupScript;
 use crate::ghcup::yaml::GhcupYaml;
 
-mod hls;
 mod packages;
 mod parser;
 mod script;
@@ -46,6 +43,8 @@ pub struct Ghcup {
     pub include_old_versions: bool,
     #[structopt(long, help = "mirror url for packages")]
     pub target_mirror: String,
+    #[structopt(long, help = "Hls versions to retain", default_value = "3")]
+    pub retain_hls_versions: usize
 }
 
 impl Ghcup {
@@ -63,11 +62,6 @@ impl Ghcup {
         GhcupPackages {
             ghcup_base: self.ghcup_base.clone(),
             include_old_versions: self.include_old_versions,
-        }
-    }
-    pub fn get_hls(&self) -> GhcupHLS {
-        GhcupHLS {
-            ghcup_base: self.ghcup_base.clone(),
         }
     }
 }

@@ -43,6 +43,15 @@ pub struct GitHubRelease {
     pub version_to_retain: usize,
 }
 
+impl GitHubRelease {
+    pub fn new(repo: String, version_to_retain: usize) -> Self {
+        Self {
+            repo,
+            version_to_retain
+        }
+    }
+}
+
 #[async_trait]
 impl SnapshotStorage<SnapshotMeta> for GitHubRelease {
     async fn snapshot(
