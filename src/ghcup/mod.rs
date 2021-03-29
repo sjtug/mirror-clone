@@ -44,7 +44,7 @@ pub struct Ghcup {
     #[structopt(long, help = "mirror url for packages")]
     pub target_mirror: String,
     #[structopt(long, help = "Hls versions to retain", default_value = "3")]
-    pub retain_hls_versions: usize
+    pub retain_hls_versions: usize,
 }
 
 impl Ghcup {

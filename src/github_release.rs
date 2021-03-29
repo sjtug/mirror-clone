@@ -47,7 +47,7 @@ impl GitHubRelease {
     pub fn new(repo: String, version_to_retain: usize) -> Self {
         Self {
             repo,
-            version_to_retain
+            version_to_retain,
         }
     }
 }

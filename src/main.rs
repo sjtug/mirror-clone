@@ -5,13 +5,13 @@ use std::path::Path;
 use lazy_static::lazy_static;
 use structopt::StructOpt;
 
+use crate::github_release::GitHubRelease;
 use common::SnapshotConfig;
 use error::Result;
 use file_backend::FileBackend;
 use opts::{Source, Target};
 use s3::S3Backend;
 use simple_diff_transfer::SimpleDiffTransfer;
-use crate::github_release::GitHubRelease;
 
 mod common;
 mod conda;
@@ -233,9 +233,12 @@ fn main() {
                     false,
                 );
                 let hls_src = stream_pipe::ByteStreamPipe::new(
-                    GitHubRelease::new(String::from("haskell/haskell-language-server"), source.retain_hls_versions),
+                    GitHubRelease::new(
+                        String::from("haskell/haskell-language-server"),
+                        source.retain_hls_versions,
+                    ),
                     buffer_path.clone().unwrap(),
-                    true
+                    true,
                 );
 
                 let unified = merge_pipe::MergePipe::new(
