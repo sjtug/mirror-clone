@@ -42,7 +42,7 @@ impl Release {
 
 impl Release {
     pub fn is_old(&self) -> bool {
-        self.vi_tags.contains(&"old".to_string())
+        self.vi_tags.iter().any(|item| item == "old")
     }
 }
 
