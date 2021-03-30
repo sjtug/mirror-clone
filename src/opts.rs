@@ -2,6 +2,7 @@ use crate::conda::CondaConfig;
 use crate::crates_io::CratesIo as CratesIoConfig;
 use crate::dart::Dart;
 use crate::file_backend::FileBackend;
+use crate::ghcup::Ghcup as GhcupConfig;
 use crate::github_release::GitHubRelease;
 use crate::homebrew::Homebrew as HomebrewConfig;
 use crate::pypi::Pypi as PypiConfig;
@@ -29,6 +30,8 @@ pub enum Source {
     GithubRelease(GitHubRelease),
     #[structopt(about = "dart pub.dev")]
     DartPub(Dart),
+    #[structopt(about = "ghcup")]
+    Ghcup(GhcupConfig),
 }
 
 #[derive(Debug)]

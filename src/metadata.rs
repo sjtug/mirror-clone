@@ -21,6 +21,12 @@ pub struct SnapshotMeta {
 }
 
 impl SnapshotMeta {
+    pub fn new(key: String) -> Self {
+        Self {
+            key,
+            ..Default::default()
+        }
+    }
     pub fn force(key: String) -> Self {
         Self {
             key,
