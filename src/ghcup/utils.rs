@@ -1,4 +1,3 @@
-use chrono::DateTime;
 use reqwest::Client;
 
 use crate::error::{Error, Result};
@@ -22,16 +21,4 @@ pub async fn get_yaml_url<'a>(base_url: &'a str, client: &'a Client) -> Result<S
                 "unable to parse ghcup version from haskell src",
             ))
         })
-}
-
-pub async fn get_last_modified<'a>(client: &'a Client, url: &'a str) -> Result<Option<u64>> {
-    Ok(client
-        .head(url)
-        .send()
-        .await?
-        .headers()
-        .get(reqwest::header::LAST_MODIFIED)
-        .and_then(|value| std::str::from_utf8(value.as_bytes()).ok())
-        .and_then(|s| DateTime::parse_from_rfc2822(s).ok())
-        .map(|dt| dt.timestamp() as u64))
 }

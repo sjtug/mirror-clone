@@ -191,7 +191,7 @@ fn main() {
                     stream_pipe::ByteStreamPipe::new(
                         source.get_script(),
                         buffer_path.clone().unwrap(),
-                        true,
+                        false,
                     ),
                     buffer_path.clone().unwrap(),
                     utils::fn_regex_rewrite(
@@ -220,7 +220,7 @@ fn main() {
                     stream_pipe::ByteStreamPipe::new(
                         source.get_yaml(),
                         buffer_path.clone().unwrap(),
-                        true,
+                        false,
                     ),
                     buffer_path.clone().unwrap(),
                     yaml_rewrite_fn,
