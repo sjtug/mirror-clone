@@ -27,7 +27,7 @@ impl SnapshotStorage<SnapshotMeta> for GhcupScript {
         progress.set_message("fetching head of url");
 
         progress.finish_with_message("done");
-        Ok(vec![SnapshotMeta::new(String::from("install.sh"))])
+        Ok(vec![SnapshotMeta::force(String::from("install.sh"))])
     }
 
     fn info(&self) -> String {

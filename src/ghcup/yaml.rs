@@ -37,7 +37,7 @@ impl SnapshotStorage<SnapshotMeta> for GhcupYaml {
 
         let yaml_url = yaml_url.trim_start_matches("https://www.haskell.org/");
         progress.finish_with_message("done");
-        Ok(vec![SnapshotMeta::new(yaml_url.to_string())])
+        Ok(vec![SnapshotMeta::force(yaml_url.to_string())])
     }
 
     fn info(&self) -> String {
