@@ -172,7 +172,10 @@ where
         if let Some(snapshot_modified_at) = snapshot_modified_at {
             if let Some(http_modified_at) = http_modified_at {
                 if snapshot_modified_at != http_modified_at {
-                    return Err(Error::PipeError("no modified time".to_string()));
+                    return Err(Error::PipeError(format!(
+                        "mismatch modified time: http={}, snapshot={}",
+                        http_modified_at, snapshot_modified_at
+                    )));
                 }
             }
         }
