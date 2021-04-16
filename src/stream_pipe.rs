@@ -163,11 +163,8 @@ where
             http_modified_at
         };
 
-        if modified_at.is_none() {
-            return Err(Error::PipeError("no modified time".to_string()));
-        }
-
-        let modified_at = modified_at.unwrap();
+        let modified_at =
+            modified_at.ok_or_else(|| Error::PipeError("no modified time".to_string()))?;
 
         if let Some(snapshot_modified_at) = snapshot_modified_at {
             if let Some(http_modified_at) = http_modified_at {
