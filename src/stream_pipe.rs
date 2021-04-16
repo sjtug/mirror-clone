@@ -145,19 +145,37 @@ where
 
         let mut total_bytes: u64 = 0;
         let content_length = response.content_length();
+        let snapshot_modified_at = snapshot.last_modified();
+        let http_modified_at = std::str::from_utf8(
+            response
+                .headers()
+                .get(reqwest::header::LAST_MODIFIED)
+                .unwrap()
+                .as_bytes(),
+        )
+        .ok()
+        .and_then(|header| DateTime::parse_from_rfc2822(&header).ok())
+        .map(|x| x.timestamp() as u64);
+
         let modified_at = if self.use_snapshot_last_modified {
-            snapshot.last_modified().unwrap()
+            snapshot_modified_at
         } else {
-            let header = std::str::from_utf8(
-                response
-                    .headers()
-                    .get(reqwest::header::LAST_MODIFIED)
-                    .unwrap()
-                    .as_bytes(),
-            )
-            .unwrap();
-            DateTime::parse_from_rfc2822(&header)?.timestamp() as u64
+            http_modified_at
         };
+
+        if modified_at.is_none() {
+            return Err(Error::PipeError("no modified time".to_string()));
+        }
+
+        let modified_at = modified_at.unwrap();
+
+        if let Some(snapshot_modified_at) = snapshot_modified_at {
+            if let Some(http_modified_at) = http_modified_at {
+                if snapshot_modified_at != http_modified_at {
+                    return Err(Error::PipeError("no modified time".to_string()));
+                }
+            }
+        }
 
         debug!(logger, "download: {} {:?}", transfer_url.0, content_length);
 
