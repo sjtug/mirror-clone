@@ -17,7 +17,7 @@ use crate::traits::{Key, Metadata, SnapshotStorage, SourceStorage};
 use crate::utils::{hash_string, unix_time};
 use futures_core::Stream;
 use futures_util::{StreamExt, TryStreamExt};
-use slog::debug;
+use slog::{debug, warn};
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio_util::codec;
@@ -145,19 +145,39 @@ where
 
         let mut total_bytes: u64 = 0;
         let content_length = response.content_length();
+        let snapshot_modified_at = snapshot.last_modified();
+        let http_modified_at = std::str::from_utf8(
+            response
+                .headers()
+                .get(reqwest::header::LAST_MODIFIED)
+                .unwrap()
+                .as_bytes(),
+        )
+        .ok()
+        .and_then(|header| DateTime::parse_from_rfc2822(&header).ok())
+        .map(|x| x.timestamp() as u64);
+
         let modified_at = if self.use_snapshot_last_modified {
-            snapshot.last_modified().unwrap()
+            snapshot_modified_at
         } else {
-            let header = std::str::from_utf8(
-                response
-                    .headers()
-                    .get(reqwest::header::LAST_MODIFIED)
-                    .unwrap()
-                    .as_bytes(),
-            )
-            .unwrap();
-            DateTime::parse_from_rfc2822(&header)?.timestamp() as u64
+            http_modified_at
         };
+
+        let modified_at =
+            modified_at.ok_or_else(|| Error::PipeError("no modified time".to_string()))?;
+
+        if let Some(snapshot_modified_at) = snapshot_modified_at {
+            if let Some(http_modified_at) = http_modified_at {
+                if snapshot_modified_at != http_modified_at {
+                    warn!(
+                        mission.logger,
+                        "mismatch modified time: http={}, snapshot={}",
+                        http_modified_at,
+                        snapshot_modified_at
+                    );
+                }
+            }
+        }
 
         debug!(logger, "download: {} {:?}", transfer_url.0, content_length);
 
