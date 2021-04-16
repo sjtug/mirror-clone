@@ -146,16 +146,13 @@ where
         let mut total_bytes: u64 = 0;
         let content_length = response.content_length();
         let snapshot_modified_at = snapshot.last_modified();
-        let http_modified_at = std::str::from_utf8(
-            response
-                .headers()
-                .get(reqwest::header::LAST_MODIFIED)
-                .unwrap()
-                .as_bytes(),
-        )
-        .ok()
-        .and_then(|header| DateTime::parse_from_rfc2822(&header).ok())
-        .map(|x| x.timestamp() as u64);
+        let http_modified_at = response
+            .headers()
+            .get(reqwest::header::LAST_MODIFIED)
+            .and_then(|x| Some(x.as_bytes()))
+            .and_then(|x| std::str::from_utf8(x).ok())
+            .and_then(|header| DateTime::parse_from_rfc2822(&header).ok())
+            .map(|x| x.timestamp() as u64);
 
         let modified_at = if self.use_snapshot_last_modified {
             snapshot_modified_at
