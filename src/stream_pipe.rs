@@ -17,7 +17,7 @@ use crate::traits::{Key, Metadata, SnapshotStorage, SourceStorage};
 use crate::utils::{hash_string, unix_time};
 use futures_core::Stream;
 use futures_util::{StreamExt, TryStreamExt};
-use slog::debug;
+use slog::{debug, warn};
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio_util::codec;
@@ -169,10 +169,12 @@ where
         if let Some(snapshot_modified_at) = snapshot_modified_at {
             if let Some(http_modified_at) = http_modified_at {
                 if snapshot_modified_at != http_modified_at {
-                    return Err(Error::PipeError(format!(
+                    warn!(
+                        mission.logger,
                         "mismatch modified time: http={}, snapshot={}",
-                        http_modified_at, snapshot_modified_at
-                    )));
+                        http_modified_at,
+                        snapshot_modified_at
+                    );
                 }
             }
         }
