@@ -45,6 +45,7 @@ pub struct SimpleDiffTransferConfig {
     pub dry_run: bool,
     pub snapshot_config: SnapshotConfig,
     pub print_plan: usize,
+    pub force_all: bool,
 }
 
 pub struct SimpleDiffTransfer<Snapshot, Source, Target, Item>
@@ -184,7 +185,7 @@ where
 
         let source_snapshot = source_snapshot
             .map_err(|err| Error::ProcessError(format!("error while sorting: {:?}", err)))?;
-        let target_snapshot = target_snapshot
+        let mut target_snapshot = target_snapshot
             .map_err(|err| Error::ProcessError(format!("error while sorting: {:?}", err)))?;
 
         if source_count != source_snapshot.len() {
@@ -201,6 +202,11 @@ where
                 "target: {} duplicated items",
                 target_count - target_snapshot.len()
             );
+        }
+
+        if self.config.force_all {
+            info!(logger, "force transfer all objects");
+            target_snapshot = vec![];
         }
 
         info!(

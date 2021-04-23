@@ -112,6 +112,7 @@ fn main() {
         no_delete: opts.transfer_config.no_delete,
         print_plan: opts.transfer_config.print_plan,
         dry_run: opts.transfer_config.dry_run,
+        force_all: opts.transfer_config.force_all,
         snapshot_config,
     };
 

@@ -122,6 +122,8 @@ pub struct TransferConfig {
         default_value = "0"
     )]
     pub print_plan: usize,
+    #[structopt(long, help = "Force transfer all objects")]
+    pub force_all: bool,
 }
 
 #[derive(StructOpt, Debug)]
