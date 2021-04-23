@@ -291,6 +291,7 @@ impl S3Metadata for SnapshotMeta {
 
 fn get_mime(key: &str) -> Option<String> {
     // TODO: add more types from https://github.com/nginx/nginx/blob/master/conf/mime.types
+    // TODO: the correct way is to mirror content-type from remote as-is, or to read MIME type
     if key.ends_with(".htm") || key.ends_with(".html") || key.ends_with(".shtml") {
         Some("text/html; charset=utf-8".to_string())
     } else {
@@ -316,6 +317,7 @@ where
             mut object,
             length,
             modified_at,
+            content_type,
         } = byte_stream;
 
         let body = object.as_stream();
@@ -330,7 +332,7 @@ where
             body: Some(rusoto_s3::StreamingBody::new(body)),
             metadata: Some(metadata),
             content_length: Some(length as i64),
-            content_type: get_mime(snapshot.key()),
+            content_type: content_type.or_else(|| get_mime(snapshot.key())),
             ..Default::default()
         };
 
