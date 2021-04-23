@@ -308,10 +308,10 @@ fn get_mime(key: &str) -> Option<String> {
         Some("application/zstd".to_string())
     } else if key.ends_with(".tar") {
         Some("application/x-tar".to_string())
-    } else if key.ends_with(".zip") || if key.ends_with(".conda") {
+    } else if key.ends_with(".zip") {
         Some("application/zip".to_string())
     } else {
-        None
+        Some("binary/octet-stream".to_string())
     }
 }
 
