@@ -296,6 +296,20 @@ fn get_mime(key: &str) -> Option<String> {
         Some("text/html; charset=utf-8".to_string())
     } else if key.ends_with(".bz2") {
         Some("application/x-bzip2".to_string())
+    } else if key.ends_with(".gz") {
+        Some("application/gzip".to_string())
+    } else if key.ends_with(".lz") {
+        Some("application/x-lzip".to_string())
+    } else if key.ends_with(".lzma") {
+        Some("application/x-lzma".to_string())
+    } else if key.ends_with(".xz") {
+        Some("application/x-xz".to_string())
+    } else if key.ends_with(".zst") {
+        Some("application/zstd".to_string())
+    } else if key.ends_with(".tar") {
+        Some("application/x-tar".to_string())
+    } else if key.ends_with(".zip") {
+        Some("application/zip".to_string())
     } else {
         None
     }
