@@ -281,6 +281,7 @@ where
                 },
                 length: content.len() as u64,
                 modified_at: unix_time(),
+                content_type: None, // use `text/html` by default
             })
         } else {
             self.source.get_object(snapshot, mission).await

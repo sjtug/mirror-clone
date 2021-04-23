@@ -70,6 +70,7 @@ pub struct ByteStream {
     pub object: ByteObject,
     pub length: u64,
     pub modified_at: u64,
+    pub content_type: Option<String>,
 }
 
 pub struct ByteStreamPipe<Source> {
@@ -146,16 +147,13 @@ where
         let mut total_bytes: u64 = 0;
         let content_length = response.content_length();
         let snapshot_modified_at = snapshot.last_modified();
-        let http_modified_at = std::str::from_utf8(
-            response
-                .headers()
-                .get(reqwest::header::LAST_MODIFIED)
-                .unwrap()
-                .as_bytes(),
-        )
-        .ok()
-        .and_then(|header| DateTime::parse_from_rfc2822(&header).ok())
-        .map(|x| x.timestamp() as u64);
+        let http_modified_at = response
+            .headers()
+            .get(reqwest::header::LAST_MODIFIED)
+            .map(|x| x.as_bytes())
+            .and_then(|x| std::str::from_utf8(x).ok())
+            .and_then(|header| DateTime::parse_from_rfc2822(&header).ok())
+            .map(|x| x.timestamp() as u64);
 
         let modified_at = if self.use_snapshot_last_modified {
             snapshot_modified_at
@@ -178,6 +176,13 @@ where
                 }
             }
         }
+
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .map(|x| x.as_bytes())
+            .and_then(|x| std::str::from_utf8(x).ok())
+            .map(|x| x.to_string());
 
         debug!(logger, "download: {} {:?}", transfer_url.0, content_length);
 
@@ -210,6 +215,7 @@ where
             },
             length: total_bytes,
             modified_at,
+            content_type,
         })
     }
 }
