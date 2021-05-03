@@ -98,6 +98,6 @@ impl SnapshotStorage<SnapshotPath> for Rustup {
     }
 
     fn info(&self) -> String {
-        format!("pypi, {:?}", self)
+        format!("rustup, {:?}", self)
     }
 }
