@@ -118,8 +118,8 @@ impl SnapshotStorage<SnapshotMeta> for Rsync {
                     };
                     snapshot.push(meta);
                 }
-                if permission.starts_with("l") {
-                    info!(logger, "symbolic link is not supported: {}", file);
+                if permission.starts_with('l') {
+                    warn!(logger, "symbolic link is not supported: {}", file);
                 }
             }
         }
