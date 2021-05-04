@@ -19,6 +19,7 @@ pub struct IndexPipe<Source> {
     index: Index,
     buffer_path: String,
     base_path: String,
+    max_depth: usize,
 }
 
 #[derive(Debug)]
@@ -35,16 +36,20 @@ impl Index {
         }
     }
 
-    fn insert(&mut self, path: &str) {
-        match path.split_once('/') {
-            Some((parent, rest)) => {
-                self.prefixes
-                    .entry(parent.to_string())
-                    .or_insert_with(Index::new)
-                    .insert(rest);
-            }
-            None => {
-                self.objects.insert(path.to_string());
+    fn insert(&mut self, path: &str, remaining_depth: usize) {
+        if remaining_depth == 0 {
+            self.objects.insert(path.to_string());
+        } else {
+            match path.split_once('/') {
+                Some((parent, rest)) => {
+                    self.prefixes
+                        .entry(parent.to_string())
+                        .or_insert_with(Index::new)
+                        .insert(rest, remaining_depth - 1);
+                }
+                None => {
+                    self.objects.insert(path.to_string());
+                }
             }
         }
     }
@@ -159,7 +164,7 @@ impl Index {
                 title,
                 navbar,
                 data,
-                chrono::Utc::now().to_rfc2822()
+                chrono::Local::now().to_rfc2822()
             )
         } else if let Some((parent, rest)) = prefix.split_once('/') {
             let mut breadcrumb = breadcrumb.to_vec();
@@ -174,21 +179,22 @@ impl Index {
     }
 }
 
-fn generate_index(objects: &[String]) -> Index {
+fn generate_index(objects: &[String], max_depth: usize) -> Index {
     let mut index = Index::new();
     for object in objects {
-        index.insert(object);
+        index.insert(object, max_depth);
     }
     index
 }
 
 impl<Source> IndexPipe<Source> {
-    pub fn new(source: Source, buffer_path: String, base_path: String) -> Self {
+    pub fn new(source: Source, buffer_path: String, base_path: String, max_depth: usize) -> Self {
         Self {
             source,
             index: Index::new(),
             buffer_path,
             base_path,
+            max_depth,
         }
     }
 
@@ -197,7 +203,7 @@ impl<Source> IndexPipe<Source> {
         // If duplicated keys are found, there should be a warning.
         // This warning will be handled on transfer.
         snapshot.dedup();
-        self.index = generate_index(&snapshot);
+        self.index = generate_index(&snapshot, self.max_depth);
         self.index.snapshot("", LIST_URL)
     }
 }
@@ -300,7 +306,7 @@ mod tests {
         let mut source = ["a", "b", "c"].iter().map(|x| x.to_string()).collect_vec();
         source.sort();
         assert_eq!(
-            generate_index(&source).snapshot("", "list.html"),
+            generate_index(&source, 999).snapshot("", "list.html"),
             vec!["list.html"]
         );
     }
@@ -313,7 +319,7 @@ mod tests {
             .collect_vec();
         source.sort();
         assert_eq!(
-            generate_index(&source).snapshot("", "list.html"),
+            generate_index(&source, 999).snapshot("", "list.html"),
             vec!["list.html", "c/list.html"]
         );
     }
@@ -326,7 +332,7 @@ mod tests {
             .collect_vec();
         source.sort();
         assert_eq!(
-            generate_index(&source).snapshot("", "list.html"),
+            generate_index(&source, 999).snapshot("", "list.html"),
             vec![
                 "list.html",
                 "c/list.html",
@@ -334,6 +340,24 @@ mod tests {
                 "c/a/b/list.html",
                 "c/a/b/c/list.html",
                 "c/a/b/c/d/list.html"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_dir_more_depth() {
+        let mut source = ["a", "b", "c/a/b/c/d/e"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect_vec();
+        source.sort();
+        let index = generate_index(&source, 2);
+        assert_eq!(
+            index.snapshot("", "list.html"),
+            vec![
+                "list.html",
+                "c/list.html",
+                "c/a/list.html"
             ]
         );
     }

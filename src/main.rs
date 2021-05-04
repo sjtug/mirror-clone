@@ -40,7 +40,7 @@ mod traits;
 mod utils;
 
 macro_rules! index_bytes_pipe {
-    ($buffer_path: expr, $prefix: expr, $use_snapshot_last_modified: expr) => {
+    ($buffer_path: expr, $prefix: expr, $use_snapshot_last_modified: expr, $max_depth: expr) => {
         |source| {
             let source = stream_pipe::ByteStreamPipe::new(
                 source,
@@ -51,6 +51,7 @@ macro_rules! index_bytes_pipe {
                 source,
                 $buffer_path.clone().unwrap(),
                 $prefix.clone().unwrap(),
+                $max_depth
             )
         }
     };
@@ -133,7 +134,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, false)
+                    index_bytes_pipe!(buffer_path, prefix, false, 2)
                 );
             }
             Source::Homebrew(source) => {
@@ -141,7 +142,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, false)
+                    index_bytes_pipe!(buffer_path, prefix, false, 999)
                 );
             }
             Source::CratesIo(source) => {
@@ -149,7 +150,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, false)
+                    index_bytes_pipe!(buffer_path, prefix, false, 999)
                 );
             }
             Source::Conda(config) => {
@@ -158,7 +159,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, false)
+                    index_bytes_pipe!(buffer_path, prefix, false, 999)
                 );
             }
             Source::Rsync(source) => {
@@ -166,7 +167,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, false)
+                    index_bytes_pipe!(buffer_path, prefix, false, 999)
                 );
             }
             Source::GithubRelease(source) => {
@@ -174,7 +175,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, true)
+                    index_bytes_pipe!(buffer_path, prefix, true, 999)
                 );
             }
             Source::DartPub(source) => {
@@ -182,7 +183,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, false)
+                    index_bytes_pipe!(buffer_path, prefix, false, 999)
                 );
             }
             Source::Ghcup(source) => {
@@ -263,6 +264,7 @@ fn main() {
                     unified,
                     buffer_path.clone().unwrap(),
                     prefix.clone().unwrap(),
+                    999
                 );
 
                 transfer!(opts, indexed, transfer_config, id_pipe!());
