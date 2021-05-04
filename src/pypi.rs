@@ -126,6 +126,7 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
         let snapshot = packages?
             .into_iter()
             .flatten()
+            .filter(|(url, _)| url.contains(".whl"))
             .map(|(url, _)| {
                 if url.starts_with(&package_base) {
                     url[package_base.len()..].to_string()
