@@ -127,11 +127,12 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
             .into_iter()
             .flatten()
             .filter(|(url, _)| url.contains(".whl") || url.contains(".tar.gz"))
-            .map(|(url, _)| {
+            .filter_map(|(url, _)| {
                 if url.starts_with(&package_base) {
-                    url[package_base.len()..].to_string()
+                    Some(url[package_base.len()..].to_string())
                 } else {
-                    panic!("PyPI package isn't stored on base: {:?}", url);
+                    warn!(logger, "PyPI package isn't stored on base: {:?}", url);
+                    None
                 }
             })
             .collect();
