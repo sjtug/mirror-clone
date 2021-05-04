@@ -21,7 +21,7 @@ use crate::metadata::SnapshotMeta;
 
 use async_trait::async_trait;
 use chrono::TimeZone;
-use slog::info;
+use slog::{info, warn};
 use std::process::Stdio;
 use structopt::StructOpt;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -117,6 +117,9 @@ impl SnapshotStorage<SnapshotMeta> for Rsync {
                         ..Default::default()
                     };
                     snapshot.push(meta);
+                }
+                if permission.starts_with('l') {
+                    warn!(logger, "symbolic link is not supported: {}", file);
                 }
             }
         }
