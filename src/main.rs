@@ -51,7 +51,7 @@ macro_rules! index_bytes_pipe {
                 source,
                 $buffer_path.clone().unwrap(),
                 $prefix.clone().unwrap(),
-                $max_depth
+                $max_depth,
             )
         }
     };
@@ -264,7 +264,7 @@ fn main() {
                     unified,
                     buffer_path.clone().unwrap(),
                     prefix.clone().unwrap(),
-                    999
+                    999,
                 );
 
                 transfer!(opts, indexed, transfer_config, id_pipe!());

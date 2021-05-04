@@ -354,11 +354,7 @@ mod tests {
         let index = generate_index(&source, 2);
         assert_eq!(
             index.snapshot("", "list.html"),
-            vec![
-                "list.html",
-                "c/list.html",
-                "c/a/list.html"
-            ]
+            vec!["list.html", "c/list.html", "c/a/list.html"]
         );
     }
 }
