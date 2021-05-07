@@ -4,6 +4,7 @@ use crate::dart::Dart;
 use crate::file_backend::FileBackend;
 use crate::ghcup::Ghcup as GhcupConfig;
 use crate::github_release::GitHubRelease;
+use crate::gradle::Gradle;
 use crate::homebrew::Homebrew as HomebrewConfig;
 use crate::pypi::Pypi as PypiConfig;
 use crate::rsync::Rsync as RsyncConfig;
@@ -32,6 +33,8 @@ pub enum Source {
     DartPub(Dart),
     #[structopt(about = "ghcup")]
     Ghcup(GhcupConfig),
+    #[structopt(about = "gradle")]
+    Gradle(Gradle),
 }
 
 #[derive(Debug)]

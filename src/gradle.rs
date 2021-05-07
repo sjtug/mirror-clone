@@ -1,27 +1,29 @@
-use crate::common::{Mission, SnapshotConfig, SnapshotPath};
+use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::Result;
+use crate::metadata::SnapshotMeta;
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
-use crate::traits::SnapshotStorage;
-
-use std::time::Duration;
-
+use crate::traits::{SnapshotStorage, SourceStorage};
 use async_trait::async_trait;
 use serde_json::Value;
 use slog::info;
+use std::time::Duration;
+use structopt::StructOpt;
 
-#[derive(Debug)]
+#[derive(Debug, StructOpt)]
 pub struct Gradle {
+    #[structopt(long, default_value = "https://services.gradle.org/versions/all")]
     pub api_base: String,
+    #[structopt(long, default_value = "https://services.gradle.org/distributions/")]
     pub distribution_base: String,
 }
 
 #[async_trait]
-impl SnapshotStorage<SnapshotPath> for Gradle {
+impl SnapshotStorage<SnapshotMeta> for Gradle {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<SnapshotPath>> {
+    ) -> Result<Vec<SnapshotMeta>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -41,7 +43,7 @@ impl SnapshotStorage<SnapshotPath> for Gradle {
         info!(logger, "parsing...");
         let json: Value = serde_json::from_str(&data).unwrap();
         let packages = json.as_array().unwrap();
-        let snapshot: Vec<String> = packages
+        let snapshot: Vec<SnapshotMeta> = packages
             .iter()
             .filter_map(|package| package.as_object())
             .filter_map(|package| {
@@ -63,15 +65,32 @@ impl SnapshotStorage<SnapshotPath> for Gradle {
             .filter_map(|url| url.as_str())
             .filter(|url| url.starts_with(&self.distribution_base))
             .map(|url| url.to_string())
-            .map(|url| url.replace(&self.distribution_base, ""))
+            .map(|url| {
+                if url.starts_with(&self.distribution_base) {
+                    url[self.distribution_base.len()..].to_string()
+                } else {
+                    panic!("package doesn't lay at its base {}", url)
+                }
+            })
+            .map(|key| SnapshotMeta::new(key))
             .collect();
 
         progress.finish_with_message("done");
 
-        Ok(crate::utils::snapshot_string_to_path(snapshot))
+        Ok(snapshot)
     }
 
     fn info(&self) -> String {
         format!("gradle, {:?}", self)
+    }
+}
+
+#[async_trait]
+impl SourceStorage<SnapshotMeta, TransferURL> for Gradle {
+    async fn get_object(&self, snapshot: &SnapshotMeta, _mission: &Mission) -> Result<TransferURL> {
+        Ok(TransferURL(format!(
+            "{}/{}",
+            self.distribution_base, snapshot.key
+        )))
     }
 }

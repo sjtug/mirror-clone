@@ -186,6 +186,14 @@ fn main() {
                     index_bytes_pipe!(buffer_path, prefix, false, 999)
                 );
             }
+            Source::Gradle(source) => {
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix, false, 999)
+                );
+            }
             Source::Ghcup(source) => {
                 let target_mirror = source.target_mirror.clone();
 
