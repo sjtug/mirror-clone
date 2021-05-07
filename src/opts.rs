@@ -5,7 +5,7 @@ use crate::file_backend::FileBackend;
 use crate::ghcup::Ghcup as GhcupConfig;
 use crate::github_release::GitHubRelease;
 use crate::gradle::Gradle;
-use crate::homebrew::Homebrew as HomebrewConfig;
+use crate::homebrew::HomebrewConfig;
 use crate::pypi::Pypi as PypiConfig;
 use crate::rsync::Rsync as RsyncConfig;
 

@@ -6,6 +6,7 @@ use lazy_static::lazy_static;
 use structopt::StructOpt;
 
 use crate::github_release::GitHubRelease;
+use crate::homebrew::Homebrew;
 use common::SnapshotConfig;
 use error::Result;
 use file_backend::FileBackend;
@@ -137,7 +138,8 @@ fn main() {
                     index_bytes_pipe!(buffer_path, prefix, false, 2)
                 );
             }
-            Source::Homebrew(source) => {
+            Source::Homebrew(config) => {
+                let source = Homebrew::new(config);
                 transfer!(
                     opts,
                     source,
