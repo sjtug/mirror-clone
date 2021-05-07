@@ -72,7 +72,7 @@ impl SnapshotStorage<SnapshotMeta> for Gradle {
                     panic!("package doesn't lay at its base {}", url)
                 }
             })
-            .map(|key| SnapshotMeta::new(key))
+            .map(SnapshotMeta::new)
             .collect();
 
         progress.finish_with_message("done");
