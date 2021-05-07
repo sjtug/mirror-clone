@@ -2,27 +2,78 @@
 //!
 //! Homebrew source will use brew.sh API to fetch all available bottles.
 //! It will generate a list of URLs.
+//!
+//! Reference: https://github.com/ustclug/ustcmirror-images/blob/master/homebrew-bottles/bottles-json/src/main.rs
+//! MIT License, Copyright (c) 2017 Jian Zeng
 
 use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
 use crate::traits::{SnapshotStorage, SourceStorage};
 
+use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use serde_json::Value;
+use serde::Deserialize;
 use slog::info;
 use structopt::StructOpt;
 
 #[derive(Debug, Clone, StructOpt)]
-pub struct Homebrew {
+pub struct HomebrewConfig {
     #[structopt(long, default_value = "https://formulae.brew.sh/api/formula.json")]
     pub api_base: String,
-    #[structopt(long, default_value = "https://homebrew.bintray.com")]
-    pub bottles_base: String,
     #[structopt(long, default_value = "all")]
     pub arch: String,
+}
+
+pub struct Homebrew {
+    pub config: HomebrewConfig,
+    url_mapping: BTreeMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct Versions {
+    stable: Option<String>,
+    bottle: bool,
+}
+
+#[derive(Deserialize)]
+struct Bottle {
+    stable: Option<BottleStable>,
+}
+
+#[derive(Deserialize)]
+struct BottleStable {
+    rebuild: u64,
+    files: HashMap<String, BottleInfo>,
+}
+
+#[derive(Deserialize)]
+struct Formula {
+    name: String,
+    versions: Versions,
+    bottle: Bottle,
+    revision: u64,
+}
+
+#[derive(Deserialize)]
+struct Formulae(Vec<Formula>);
+
+#[derive(Deserialize)]
+struct BottleInfo {
+    url: String,
+    #[allow(dead_code)]
+    sha256: String,
+}
+
+impl Homebrew {
+    pub fn new(config: HomebrewConfig) -> Self {
+        Self {
+            config,
+            url_mapping: BTreeMap::new(),
+        }
+    }
 }
 
 #[async_trait]
@@ -40,7 +91,7 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
         info!(logger, "fetching API json...");
         progress.set_message("fetching API json...");
         let data = client
-            .get(&self.api_base)
+            .get(&self.config.api_base)
             .send()
             .timeout(Duration::from_secs(60))
             .await
@@ -51,58 +102,75 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
             .into_result()?;
 
         info!(logger, "parsing...");
-        let json: Value = serde_json::from_str(&data).unwrap();
-        let packages = json.as_array().unwrap();
-        let bottles_base = if self.bottles_base.ends_with('/') {
-            self.bottles_base.clone()
-        } else {
-            format!("{}/", self.bottles_base)
-        };
-        let snapshot: Vec<String> = packages
-            .iter()
-            .filter_map(|package| package.as_object())
-            .filter_map(|package| {
-                progress.set_message(
-                    package
-                        .get("name")
-                        .and_then(|name| name.as_str())
-                        .unwrap_or(""),
-                );
-                package.get("bottle")
-            })
-            .filter_map(|bottles| bottles.as_object())
-            .filter_map(|bottles| bottles.get("stable"))
-            .filter_map(|bottles| bottles.as_object())
-            .filter_map(|bottles| bottles.get("files"))
-            .filter_map(|files| files.as_object())
-            .flat_map(|files| files.values())
-            .filter_map(|bottle_urls| bottle_urls.get("url"))
-            .filter_map(|url| url.as_str())
-            .filter(|url| self.arch.is_empty() || self.arch == "all" || url.contains(&self.arch))
-            .map(|url| url.to_string())
-            .map(|url| {
-                if url.starts_with(&bottles_base) {
-                    url[bottles_base.len()..].to_string()
-                } else {
-                    panic!("Bottles URL doens't begin with its base: {:?}", url);
+        let formulae: Formulae = serde_json::from_str(&data).unwrap();
+        let mut snapshots = vec![];
+        for f in formulae.0 {
+            progress.set_message(&f.name);
+
+            if f.versions.bottle {
+                if let Some(versions_stable) = f.versions.stable {
+                    if let Some(bs) = f.bottle.stable {
+                        for (platform, v) in bs.files {
+                            if self.config.arch.is_empty()
+                                || self.config.arch == "all"
+                                || platform == self.config.arch
+                            {
+                                let key = format!(
+                                    "{name}-{version}{revision}.{platform}.bottle{rebuild}.tar.gz",
+                                    name = f.name,
+                                    version = versions_stable,
+                                    revision = if f.revision == 0 {
+                                        "".to_owned()
+                                    } else {
+                                        format!("_{}", f.revision)
+                                    },
+                                    platform = platform,
+                                    rebuild = if bs.rebuild == 0 {
+                                        "".to_owned()
+                                    } else {
+                                        format!(".{}", bs.rebuild)
+                                    },
+                                );
+                                let key = crate::utils::rewrite_url_string(&gen_map, &key);
+                                self.url_mapping.insert(key.clone(), v.url);
+                                snapshots.push(SnapshotPath::new(key));
+                            }
+                        }
+                    }
                 }
-            })
-            .map(|url| crate::utils::rewrite_url_string(&gen_map, &url))
-            .collect();
+            }
+        }
 
         progress.finish_with_message("done");
 
-        Ok(crate::utils::snapshot_string_to_path(snapshot))
+        Ok(snapshots)
     }
 
     fn info(&self) -> String {
-        format!("homebrew, {:?}", self)
+        format!("homebrew, {:?}", self.config)
     }
 }
 
 #[async_trait]
 impl SourceStorage<SnapshotPath, TransferURL> for Homebrew {
-    async fn get_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<TransferURL> {
-        Ok(TransferURL(format!("{}/{}", self.bottles_base, snapshot.0)))
+    async fn get_object(&self, snapshot: &SnapshotPath, mission: &Mission) -> Result<TransferURL> {
+        let url = self
+            .url_mapping
+            .get(&snapshot.0)
+            .expect("no URL for bottle");
+        let resp = mission
+            .client
+            .get(url)
+            .header(reqwest::header::AUTHORIZATION, "Bearer QQ==")
+            .header(
+                reqwest::header::ACCEPT,
+                "application/vnd.oci.image.index.v1+json",
+            )
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(Error::HTTPError(resp.status()));
+        }
+        Ok(TransferURL(resp.url().as_str().to_string()))
     }
 }
