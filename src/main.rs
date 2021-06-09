@@ -1,4 +1,5 @@
 #![deny(clippy::all)]
+#![allow(clippy::enum_variant_names)]
 
 use std::path::Path;
 
