@@ -2,6 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Deserialize;
 
+pub(crate) const CONFIG_VERSION: &str = "0.0.4";
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct DownloadSource {
