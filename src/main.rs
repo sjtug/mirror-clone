@@ -6,14 +6,15 @@ use std::path::Path;
 use lazy_static::lazy_static;
 use structopt::StructOpt;
 
-use crate::github_release::GitHubRelease;
-use crate::homebrew::Homebrew;
 use common::SnapshotConfig;
 use error::Result;
 use file_backend::FileBackend;
 use opts::{Source, Target};
 use s3::S3Backend;
 use simple_diff_transfer::SimpleDiffTransfer;
+
+use crate::github_release::GitHubRelease;
+use crate::homebrew::Homebrew;
 
 mod common;
 mod conda;
@@ -91,6 +92,7 @@ lazy_static! {
         regex::Regex::new("https://downloads.haskell.org").unwrap();
 }
 const HLS_URL: &str = "https://github.com/haskell/haskell-language-server";
+const STACK_URL: &str = "https://github.com/commercialhaskell/stack";
 const HASKELL_URL: &str = "https://downloads.haskell.org";
 
 fn main() {
@@ -225,6 +227,10 @@ fn main() {
                             Path::new(&target_mirror).join("packages").to_str().unwrap(),
                         )
                         .replace(
+                            STACK_URL,
+                            Path::new(&target_mirror).join("stack").to_str().unwrap(),
+                        )
+                        .replace(
                             HLS_URL,
                             Path::new(&target_mirror).join("hls").to_str().unwrap(),
                         ))
@@ -245,6 +251,14 @@ fn main() {
                     buffer_path.clone().unwrap(),
                     false,
                 );
+                let stack_src = stream_pipe::ByteStreamPipe::new(
+                    GitHubRelease::new(
+                        String::from("commercialhaskell/stack"),
+                        source.retain_stack_versions,
+                    ),
+                    buffer_path.clone().unwrap(),
+                    true,
+                );
                 let hls_src = stream_pipe::ByteStreamPipe::new(
                     GitHubRelease::new(
                         String::from("haskell/haskell-language-server"),
@@ -259,10 +273,15 @@ fn main() {
                     merge_pipe::MergePipe::new(
                         hls_src,
                         merge_pipe::MergePipe::new(
-                            yaml_src,
-                            script_src,
-                            String::from("yaml"),
-                            Some(String::from("script")),
+                            stack_src,
+                            merge_pipe::MergePipe::new(
+                                yaml_src,
+                                script_src,
+                                String::from("yaml"),
+                                Some(String::from("script")),
+                            ),
+                            String::from("stack"),
+                            None,
                         ),
                         String::from("hls"),
                         None,

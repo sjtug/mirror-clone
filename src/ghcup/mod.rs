@@ -43,6 +43,8 @@ pub struct Ghcup {
     pub include_old_versions: bool,
     #[structopt(long, help = "mirror url for packages")]
     pub target_mirror: String,
+    #[structopt(long, help = "Stack versions to retain", default_value = "3")]
+    pub retain_stack_versions: usize,
     #[structopt(long, help = "Hls versions to retain", default_value = "3")]
     pub retain_hls_versions: usize,
 }
