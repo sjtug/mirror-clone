@@ -47,6 +47,8 @@ pub struct Ghcup {
     pub retain_stack_versions: usize,
     #[structopt(long, help = "Hls versions to retain", default_value = "3")]
     pub retain_hls_versions: usize,
+    #[structopt(long, default_value = "ghcup-0.0.4.yaml")]
+    pub additional_yaml: Vec<String>,
 }
 
 impl Ghcup {
@@ -58,6 +60,7 @@ impl Ghcup {
     pub fn get_yaml(&self) -> GhcupYaml {
         GhcupYaml {
             ghcup_base: self.ghcup_base.clone(),
+            additional_yaml: self.additional_yaml.clone(),
         }
     }
     pub fn get_packages(&self) -> GhcupPackages {

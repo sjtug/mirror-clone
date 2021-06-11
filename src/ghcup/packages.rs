@@ -42,7 +42,7 @@ impl SnapshotStorage<SnapshotMeta> for GhcupPackages {
         let yaml_data = client.get(&yaml_url).send().await?.bytes().await?;
         let ghcup_config: GhcupYamlParser = serde_yaml::from_slice(&yaml_data)?;
 
-        let fetch_uris: Vec<_> = ghcup_config
+        let mut fetch_uris: Vec<_> = ghcup_config
             .ghcup_downloads
             .uris(self.include_old_versions)
             .into_iter()
@@ -51,7 +51,9 @@ impl SnapshotStorage<SnapshotMeta> for GhcupPackages {
             .collect();
 
         progress.finish_with_message("done");
-        Ok(crate::utils::snapshot_string_to_meta(fetch_uris))
+        Ok(crate::utils::snapshot_string_to_meta(
+            fetch_uris.drain(..=3).collect(),
+        ))
     }
 
     fn info(&self) -> String {
