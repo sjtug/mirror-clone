@@ -51,7 +51,7 @@ impl SnapshotStorage<SnapshotMeta> for GhcupYaml {
                         .map_err(|_| Error::ProcessError(String::from("invalid ghcup yaml url")))?;
                     segments.pop().push(filename);
                 }
-                Ok(new_yaml_url.path()[1..].to_string())    // remove first char (slash)
+                Ok(new_yaml_url.path()[1..].to_string()) // remove first char (slash)
             })
             .collect::<Result<Vec<_>>>()?;
 
