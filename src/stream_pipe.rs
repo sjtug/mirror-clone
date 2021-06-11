@@ -152,7 +152,7 @@ where
             .get(reqwest::header::LAST_MODIFIED)
             .map(|x| x.as_bytes())
             .and_then(|x| std::str::from_utf8(x).ok())
-            .and_then(|header| DateTime::parse_from_rfc2822(&header).ok())
+            .and_then(|header| DateTime::parse_from_rfc2822(header).ok())
             .map(|x| x.timestamp() as u64);
 
         let modified_at = if self.use_snapshot_last_modified {

@@ -2,11 +2,12 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Deserialize;
 
+pub(crate) const CONFIG_VERSION: &str = "0.0.5";
+
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct DownloadSource {
     pub dl_uri: String,
-    pub dl_subdir: Option<String>,
     pub dl_hash: String,
 }
 
@@ -47,7 +48,6 @@ impl Release {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Components {
     #[serde(rename = "Cabal")]
     pub cabal: HashMap<String, Release>,

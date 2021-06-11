@@ -274,7 +274,7 @@ where
         progress.set_position(0);
 
         let map_snapshot = |snapshot: Snapshot, plan: PlanType| {
-            progress.set_message(&snapshot.key());
+            progress.set_message(snapshot.key());
             let source = source.clone();
             let target = target.clone();
             let source_mission = source_mission.clone();

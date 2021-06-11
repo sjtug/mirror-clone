@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 use slog::info;
 use structopt::StructOpt;
+use url::Url;
 
 use crate::common::{Mission, SnapshotConfig, TransferURL};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::metadata::SnapshotMeta;
 use crate::traits::{SnapshotStorage, SourceStorage};
 
@@ -16,6 +17,8 @@ pub struct GhcupYaml {
         default_value = "https://gitlab.haskell.org/haskell/ghcup-hs/-/raw/master/"
     )]
     pub ghcup_base: String,
+    #[structopt(long, default_value = "ghcup-0.0.4.yaml")]
+    pub additional_yaml: Vec<String>,
 }
 
 #[async_trait]
@@ -33,11 +36,30 @@ impl SnapshotStorage<SnapshotMeta> for GhcupYaml {
 
         info!(logger, "fetching ghcup config...");
         progress.set_message("downloading version file");
-        let yaml_url = get_yaml_url(base_url, &client).await?;
+        let yaml_url = Url::parse(get_yaml_url(base_url, &client).await?.as_str())
+            .map_err(|_| Error::ProcessError(String::from("invalid ghcup yaml url")))?;
 
-        let yaml_url = yaml_url.trim_start_matches("https://www.haskell.org/");
+        // additional yaml paths
+        let mut yaml_paths = self
+            .additional_yaml
+            .iter()
+            .map(|filename| {
+                let mut new_yaml_url = yaml_url.clone();
+                {
+                    let mut segments = new_yaml_url
+                        .path_segments_mut()
+                        .map_err(|_| Error::ProcessError(String::from("invalid ghcup yaml url")))?;
+                    segments.pop().push(filename);
+                }
+                Ok(new_yaml_url.path()[1..].to_string()) // remove first char (slash)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        yaml_paths.push(yaml_url.path()[1..].to_string()); // append base yaml path (slash ditto)
+
         progress.finish_with_message("done");
-        Ok(vec![SnapshotMeta::force(yaml_url.to_string())])
+
+        Ok(yaml_paths.into_iter().map(SnapshotMeta::force).collect())
     }
 
     fn info(&self) -> String {
