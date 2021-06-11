@@ -51,9 +51,7 @@ impl SnapshotStorage<SnapshotMeta> for GhcupPackages {
             .collect();
 
         progress.finish_with_message("done");
-        Ok(crate::utils::snapshot_string_to_meta(
-            fetch_uris.drain(..=3).collect(),
-        ))
+        Ok(crate::utils::snapshot_string_to_meta(fetch_uris))
     }
 
     fn info(&self) -> String {
