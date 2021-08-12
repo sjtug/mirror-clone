@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Deserialize;
 
-pub(crate) const CONFIG_VERSION: &str = "0.0.5";
+pub(crate) const CONFIG_VERSION: &str = "0.0.6";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
