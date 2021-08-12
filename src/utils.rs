@@ -1,3 +1,6 @@
+use std::convert::Infallible;
+use std::str::FromStr;
+
 use indicatif::ProgressStyle;
 use regex::Regex;
 use slog::{o, Drain};
@@ -5,6 +8,28 @@ use slog::{o, Drain};
 use crate::common::SnapshotPath;
 use crate::error::Result;
 use crate::metadata::SnapshotMeta;
+
+#[derive(Debug, Clone, Default)]
+pub struct CommaSplitVecString(Vec<String>);
+
+impl FromStr for CommaSplitVecString {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(Self(
+            s.split(',')
+                .map(str::trim)
+                .map(ToString::to_string)
+                .collect(),
+        ))
+    }
+}
+
+impl From<CommaSplitVecString> for Vec<String> {
+    fn from(v: CommaSplitVecString) -> Self {
+        v.0
+    }
+}
 
 pub fn create_logger() -> slog::Logger {
     let decorator = slog_term::TermDecorator::new().build();
