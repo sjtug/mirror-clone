@@ -48,7 +48,10 @@ pub struct Ghcup {
     pub retain_stack_versions: usize,
     #[structopt(long, help = "Hls versions to retain", default_value = "3")]
     pub retain_hls_versions: usize,
-    #[structopt(long, default_value = "ghcup-0.0.4.yaml,ghcup-0.0.5.yaml")]
+    #[structopt(
+        long,
+        default_value = "ghcup-0.0.4.yaml,ghcup-0.0.5.yaml,ghcup-0.0.6.yaml"
+    )]
     pub additional_yaml: CommaSplitVecString,
 }
 
