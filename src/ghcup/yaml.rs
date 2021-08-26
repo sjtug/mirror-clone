@@ -17,7 +17,10 @@ pub struct GhcupYaml {
         default_value = "https://gitlab.haskell.org/haskell/ghcup-hs/-/raw/master/"
     )]
     pub ghcup_base: String,
-    #[structopt(long, default_value = "ghcup-0.0.4.yaml")]
+    #[structopt(
+        long,
+        default_value = "ghcup-0.0.4.yaml,ghcup-0.0.5.yaml,ghcup-0.0.6.yaml"
+    )]
     pub additional_yaml: Vec<String>,
 }
 
