@@ -29,6 +29,7 @@ mod parser;
 mod script;
 mod utils;
 mod yaml;
+mod version;
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct Ghcup {

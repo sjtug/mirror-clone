@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use slog::info;
 use structopt::StructOpt;
 use url::Url;
@@ -9,6 +11,95 @@ use crate::metadata::SnapshotMeta;
 use crate::traits::{SnapshotStorage, SourceStorage};
 
 use super::utils::get_yaml_url;
+use super::version::Version;
+
+#[derive(Debug, Clone)]
+struct GhcupRepoConfig {
+    host: String,
+    repo: String,
+    pagination: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FileInfo {
+    id: String,
+    name: String,
+    path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TagInfo {
+    name: String,
+    commit: CommitInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CommitInfo {
+    id: String,
+}
+
+impl TagInfo {
+    pub fn id(&self) -> &str {
+        &self.commit.id
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ObjectInfo {
+    id: String,
+    name: String,
+    version: Version,
+}
+
+async fn fetch_last_tag(client: &Client, config: &GhcupRepoConfig) -> Result<String> {
+    let req = client.get(format!(
+        "https://{}/api/v4/projects/{}/repository/tags",
+        config.host,
+        urlencoding::encode(&*config.repo)
+    ));
+    let res: Vec<TagInfo> = req
+        .send()
+        .await
+        .map_err(|_| Error::ProcessError(String::from("unable to fetch last tag")))?
+        .json()
+        .await
+        .map_err(|_| Error::ProcessError(String::from("unable to parse tag meta")))?;
+    Ok(res
+        .first()
+        .ok_or_else(|| Error::ProcessError(String::from("no tag found")))?
+        .id()
+        .to_string())
+}
+
+async fn list_files(
+    client: &Client,
+    config: &GhcupRepoConfig,
+    commit: String,
+) -> Result<Vec<FileInfo>> {
+    let mut output = Vec::new();
+    for page in 1.. {
+        let res: Vec<FileInfo> = client
+            .get(format!(
+                "https://{}/api/v4/projects/{}/repository/tree",
+                config.host,
+                urlencoding::encode(&*config.repo)
+            ))
+            .query(&[("per_page", config.pagination), ("page", page)])
+            .query(&[("ref", commit.clone())])
+            .send()
+            .await
+            .map_err(|_| Error::ProcessError(String::from("unable to list files")))?
+            .json()
+            .await
+            .map_err(|_| Error::ProcessError(String::from("unable to parse files meta")))?;
+        if !res.is_empty() {
+            output.extend(res);
+        } else {
+            break;
+        }
+    }
+    Ok(output)
+}
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct GhcupYaml {
