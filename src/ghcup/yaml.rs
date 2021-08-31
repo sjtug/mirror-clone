@@ -5,9 +5,9 @@ use itertools::Itertools;
 use slog::info;
 
 use crate::common::{Mission, SnapshotConfig, TransferURL};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::metadata::SnapshotMeta;
-use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::traits::{Key, SnapshotStorage, SourceStorage};
 
 use super::utils::{fetch_last_tag, filter_map_file_objs, list_files};
 use super::GhcupRepoConfig;
@@ -75,9 +75,11 @@ impl SnapshotStorage<SnapshotMeta> for GhcupYaml {
 #[async_trait]
 impl SourceStorage<SnapshotMeta, TransferURL> for GhcupYaml {
     async fn get_object(&self, snapshot: &SnapshotMeta, _mission: &Mission) -> Result<TransferURL> {
-        Ok(TransferURL(format!(
-            "{}/{}",
-            "https://www.haskell.org", snapshot.key
-        )))
+        Ok(TransferURL(
+            self.snapmeta_to_remote
+                .get(snapshot.key())
+                .ok_or_else(|| Error::ProcessError(String::from("missing object in map")))?
+                .clone(),
+        ))
     }
 }
