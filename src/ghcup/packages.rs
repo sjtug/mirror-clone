@@ -1,24 +1,18 @@
 use async_trait::async_trait;
-use slog::info;
-use structopt::StructOpt;
+use slog::{info, warn};
 
 use crate::common::{Mission, SnapshotConfig, TransferURL};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::metadata::SnapshotMeta;
 use crate::traits::{SnapshotStorage, SourceStorage};
 
-use super::parser::GhcupYamlParser;
-use super::utils::get_yaml_url;
+use super::parser::{GhcupYamlParser, EXPECTED_CONFIG_VERSION};
+use super::utils::{fetch_last_tag, filter_map_file_objs, list_files};
+use super::GhcupRepoConfig;
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Clone)]
 pub struct GhcupPackages {
-    #[structopt(
-        long,
-        help = "Ghcup upstream",
-        default_value = "https://gitlab.haskell.org/haskell/ghcup-hs/-/raw/master/"
-    )]
-    pub ghcup_base: String,
-    #[structopt(long, help = "Include legacy versions of packages")]
+    pub ghcup_repo_config: GhcupRepoConfig,
     pub include_old_versions: bool,
 }
 
@@ -32,12 +26,38 @@ impl SnapshotStorage<SnapshotMeta> for GhcupPackages {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
-
-        let base_url = self.ghcup_base.trim_end_matches('/');
+        let repo_config = &self.ghcup_repo_config;
 
         info!(logger, "fetching ghcup config...");
+        progress.set_message("querying version files");
+        let latest_yaml_obj = filter_map_file_objs(
+            list_files(
+                &client,
+                repo_config,
+                fetch_last_tag(&client, repo_config).await?,
+            )
+            .await?,
+        )
+        .max_by(|x, y| x.version().cmp(&y.version()))
+        .ok_or_else(|| Error::ProcessError(String::from("no config file found")))?;
+
+        if latest_yaml_obj.version() != EXPECTED_CONFIG_VERSION {
+            warn!(
+                logger,
+                "unmatched ghcup config yaml. expected: {}, got: {}",
+                EXPECTED_CONFIG_VERSION,
+                latest_yaml_obj.version()
+            )
+        }
+
         progress.set_message("downloading version file");
-        let yaml_url = get_yaml_url(base_url, &client).await?;
+        let yaml_url = format!(
+            "https://{}/api/v4/projects/{}/repository/blobs/{}/raw",
+            repo_config.host,
+            urlencoding::encode(&repo_config.repo),
+            latest_yaml_obj.id()
+        );
+
         progress.set_message("downloading yaml config");
         let yaml_data = client.get(&yaml_url).send().await?.bytes().await?;
         let ghcup_config: GhcupYamlParser = serde_yaml::from_slice(&yaml_data)?;
