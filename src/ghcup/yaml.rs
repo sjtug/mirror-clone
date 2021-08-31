@@ -78,7 +78,7 @@ impl SourceStorage<SnapshotMeta, TransferURL> for GhcupYaml {
         Ok(TransferURL(
             self.snapmeta_to_remote
                 .get(snapshot.key())
-                .ok_or_else(|| Error::ProcessError(String::from("missing object in map")))?
+                .unwrap() // SAFETY `snapshot()` is called in prior to `get_object()`, thus the key must be present
                 .clone(),
         ))
     }

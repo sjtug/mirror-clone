@@ -116,14 +116,11 @@ pub async fn fetch_last_tag(client: &Client, config: &GhcupRepoConfig) -> Result
         config.host,
         urlencoding::encode(&*config.repo)
     ));
-    let res: Vec<TagInfo> = req
-        .send()
-        .await
-        .map_err(|_| Error::ProcessError(String::from("unable to fetch last tag")))?
-        .json()
-        .await
-        .map_err(|_| Error::ProcessError(String::from("unable to parse tag meta")))?;
-    Ok(res
+
+    let tags: Vec<TagInfo> = serde_json::from_slice(&*req.send().await?.bytes().await?)
+        .map_err(Error::JsonDecodeError)?;
+
+    Ok(tags
         .first()
         .ok_or_else(|| Error::ProcessError(String::from("no tag found")))?
         .id()
@@ -137,20 +134,17 @@ pub async fn list_files(
 ) -> Result<Vec<FileInfo>> {
     let mut output = Vec::new();
     for page in 1.. {
-        let res: Vec<FileInfo> = client
+        let req = client
             .get(format!(
                 "https://{}/api/v4/projects/{}/repository/tree",
                 config.host,
                 urlencoding::encode(&*config.repo)
             ))
             .query(&[("per_page", config.pagination), ("page", page)])
-            .query(&[("ref", commit.clone())])
-            .send()
-            .await
-            .map_err(|_| Error::ProcessError(String::from("unable to list files")))?
-            .json()
-            .await
-            .map_err(|_| Error::ProcessError(String::from("unable to parse files meta")))?;
+            .query(&[("ref", commit.clone())]);
+        let res: Vec<FileInfo> = serde_json::from_slice(&*req.send().await?.bytes().await?)
+            .map_err(Error::JsonDecodeError)?;
+
         if !res.is_empty() {
             output.extend(res);
         } else {
