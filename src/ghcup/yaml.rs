@@ -5,7 +5,7 @@ use itertools::Itertools;
 use slog::info;
 
 use crate::common::{Mission, SnapshotConfig, TransferURL};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::metadata::SnapshotMeta;
 use crate::traits::{Key, SnapshotStorage, SourceStorage};
 
