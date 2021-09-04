@@ -32,12 +32,8 @@ mod yaml;
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct Ghcup {
-    #[structopt(
-        long,
-        help = "Ghcup upstream",
-        default_value = "https://gitlab.haskell.org/haskell/ghcup-hs/-/raw/master/"
-    )]
-    pub ghcup_base: String,
+    #[structopt(flatten)]
+    pub ghcup_repo_config: GhcupRepoConfig,
     #[structopt(long, default_value = "https://get-ghcup.haskell.org/")]
     pub script_url: String,
     #[structopt(long, help = "Include legacy versions of packages")]
@@ -55,6 +51,16 @@ pub struct Ghcup {
     pub additional_yaml: CommaSplitVecString,
 }
 
+#[derive(Debug, Clone, StructOpt)]
+pub struct GhcupRepoConfig {
+    #[structopt(long, help = "Ghcup gitlab host", default_value = "gitlab.haskell.org")]
+    host: String,
+    #[structopt(long, help = "Ghcup gitlab repo", default_value = "haskell/ghcup-hs")]
+    repo: String,
+    #[structopt(long, help = "Gitlab fetch pagination", default_value = "100")]
+    pagination: usize,
+}
+
 impl Ghcup {
     pub fn get_script(&self) -> GhcupScript {
         GhcupScript {
@@ -63,13 +69,13 @@ impl Ghcup {
     }
     pub fn get_yaml(&self) -> GhcupYaml {
         GhcupYaml {
-            ghcup_base: self.ghcup_base.clone(),
-            additional_yaml: self.additional_yaml.clone().into(),
+            ghcup_repo_config: self.ghcup_repo_config.clone(),
+            snapmeta_to_remote: Default::default(),
         }
     }
     pub fn get_packages(&self) -> GhcupPackages {
         GhcupPackages {
-            ghcup_base: self.ghcup_base.clone(),
+            ghcup_repo_config: self.ghcup_repo_config.clone(),
             include_old_versions: self.include_old_versions,
         }
     }

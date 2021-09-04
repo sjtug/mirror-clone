@@ -1,27 +1,21 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
+use itertools::Itertools;
 use slog::info;
-use structopt::StructOpt;
-use url::Url;
 
 use crate::common::{Mission, SnapshotConfig, TransferURL};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::metadata::SnapshotMeta;
-use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::traits::{Key, SnapshotStorage, SourceStorage};
 
-use super::utils::get_yaml_url;
+use super::utils::{fetch_last_tag, filter_map_file_objs, list_files};
+use super::GhcupRepoConfig;
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Clone)]
 pub struct GhcupYaml {
-    #[structopt(
-        long,
-        default_value = "https://gitlab.haskell.org/haskell/ghcup-hs/-/raw/master/"
-    )]
-    pub ghcup_base: String,
-    #[structopt(
-        long,
-        default_value = "ghcup-0.0.4.yaml,ghcup-0.0.5.yaml,ghcup-0.0.6.yaml"
-    )]
-    pub additional_yaml: Vec<String>,
+    pub ghcup_repo_config: GhcupRepoConfig,
+    pub snapmeta_to_remote: HashMap<String, String>,
 }
 
 #[async_trait]
@@ -34,35 +28,43 @@ impl SnapshotStorage<SnapshotMeta> for GhcupYaml {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
-
-        let base_url = self.ghcup_base.trim_end_matches('/');
+        let repo_config = &self.ghcup_repo_config;
 
         info!(logger, "fetching ghcup config...");
-        progress.set_message("downloading version file");
-        let yaml_url = Url::parse(get_yaml_url(base_url, &client).await?.as_str())
-            .map_err(|_| Error::ProcessError(String::from("invalid ghcup yaml url")))?;
+        progress.set_message("querying version files");
+        let yaml_objs = filter_map_file_objs(
+            list_files(
+                &client,
+                repo_config,
+                fetch_last_tag(&client, repo_config).await?,
+            )
+            .await?,
+        )
+        .collect_vec();
 
-        // additional yaml paths
-        let mut yaml_paths = self
-            .additional_yaml
-            .iter()
-            .map(|filename| {
-                let mut new_yaml_url = yaml_url.clone();
-                {
-                    let mut segments = new_yaml_url
-                        .path_segments_mut()
-                        .map_err(|_| Error::ProcessError(String::from("invalid ghcup yaml url")))?;
-                    segments.pop().push(filename);
-                }
-                Ok(new_yaml_url.path()[1..].to_string()) // remove first char (slash)
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        yaml_paths.push(yaml_url.path()[1..].to_string()); // append base yaml path (slash ditto)
+        // construct snapmeta * remote map
+        let snapmeta_to_remote = &mut self.snapmeta_to_remote;
+        let host = repo_config.host.as_str();
+        let repo = repo_config.repo.as_str();
+        yaml_objs.iter().for_each(|obj| {
+            snapmeta_to_remote.insert(
+                format!("ghcup/data/{}", obj.name()),
+                format!(
+                    "https://{}/api/v4/projects/{}/repository/blobs/{}/raw",
+                    host,
+                    urlencoding::encode(repo),
+                    obj.id()
+                ),
+            );
+        });
 
         progress.finish_with_message("done");
 
-        Ok(yaml_paths.into_iter().map(SnapshotMeta::force).collect())
+        Ok(yaml_objs
+            .into_iter()
+            .map(|obj| format!("ghcup/data/{}", obj.name()))
+            .map(SnapshotMeta::force)
+            .collect())
     }
 
     fn info(&self) -> String {
@@ -73,9 +75,11 @@ impl SnapshotStorage<SnapshotMeta> for GhcupYaml {
 #[async_trait]
 impl SourceStorage<SnapshotMeta, TransferURL> for GhcupYaml {
     async fn get_object(&self, snapshot: &SnapshotMeta, _mission: &Mission) -> Result<TransferURL> {
-        Ok(TransferURL(format!(
-            "{}/{}",
-            "https://www.haskell.org", snapshot.key
-        )))
+        Ok(TransferURL(
+            self.snapmeta_to_remote
+                .get(snapshot.key())
+                .unwrap() // SAFETY `snapshot()` is called in prior to `get_object()`, thus the key must be present
+                .clone(),
+        ))
     }
 }

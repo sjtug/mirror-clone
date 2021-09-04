@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Deserialize;
 
-pub(crate) const CONFIG_VERSION: &str = "0.0.7";
+use super::utils::Version;
+
+pub const EXPECTED_CONFIG_VERSION: Version = Version::new(0, 0, 6);
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,12 +59,14 @@ pub struct Components {
     pub ghcup: HashMap<String, Release>,
     #[serde(rename = "GHC")]
     pub ghc: HashMap<String, Release>,
+    #[serde(rename = "Stack")]
+    pub stack: HashMap<String, Release>,
 }
 
 impl Components {
     pub fn uris(&self, include_old_versions: bool) -> HashSet<&str> {
-        let fields: [&HashMap<String, Release>; 4] =
-            [&self.cabal, &self.hls, &self.ghcup, &self.ghc];
+        let fields: [&HashMap<String, Release>; 5] =
+            [&self.cabal, &self.hls, &self.ghcup, &self.ghc, &self.stack];
         fields
             .iter()
             .flat_map(|field| {
