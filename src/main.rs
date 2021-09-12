@@ -22,6 +22,7 @@ mod crates_io;
 mod dart;
 mod error;
 mod file_backend;
+mod filter_pipe;
 mod ghcup;
 mod github_release;
 mod gradle;
