@@ -141,7 +141,8 @@ pub async fn list_files(
                 urlencoding::encode(&*config.repo)
             ))
             .query(&[("per_page", config.pagination), ("page", page)])
-            .query(&[("ref", commit.clone())]);
+            .query(&[("ref", commit.clone())])
+            .query(&[("recursive", true)]);
         let res: Vec<FileInfo> = serde_json::from_slice(&*req.send().await?.bytes().await?)
             .map_err(Error::JsonDecodeError)?;
 
