@@ -58,7 +58,6 @@ impl SnapshotStorage<SnapshotMeta> for GhcupYaml {
                 ),
             );
         });
-        eprintln!("{:#?}", snapmeta_to_remote);
 
         progress.finish_with_message("done");
 
