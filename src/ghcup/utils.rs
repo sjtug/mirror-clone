@@ -4,8 +4,9 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use reqwest::Client;
+use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use crate::error::{Error, Result};
 
@@ -133,24 +134,38 @@ pub async fn list_files(
     commit: String,
 ) -> Result<Vec<FileInfo>> {
     let mut output = Vec::new();
-    for page in 1.. {
-        let req = client
-            .get(format!(
-                "https://{}/api/v4/projects/{}/repository/tree",
-                config.host,
-                urlencoding::encode(&*config.repo)
-            ))
-            .query(&[("per_page", config.pagination), ("page", page)])
-            .query(&[("ref", commit.clone())]);
-        let res: Vec<FileInfo> = serde_json::from_slice(&*req.send().await?.bytes().await?)
-            .map_err(Error::JsonDecodeError)?;
 
-        if !res.is_empty() {
-            output.extend(res);
-        } else {
-            break;
-        }
+    let mut initial_url = Url::parse(&*format!(
+        "https://{}/api/v4/projects/{}/repository/tree",
+        config.host,
+        urlencoding::encode(&*config.repo)
+    ))
+    .unwrap();
+    initial_url
+        .query_pairs_mut()
+        .append_pair("per_page", &*config.per_page.to_string())
+        .append_pair("pagination", "keyset")
+        .append_pair("ref", &*commit)
+        .append_pair("recursive", "true");
+
+    let mut maybe_url = Some(initial_url);
+    while let Some(url) = &mut maybe_url {
+        let resp = client.get(url.clone()).send().await?;
+
+        let links =
+            parse_link_header::parse(resp.headers().get(header::LINK).unwrap().to_str().unwrap())
+                .unwrap();
+
+        let res: Vec<FileInfo> =
+            serde_json::from_slice(&*resp.bytes().await?).map_err(Error::JsonDecodeError)?;
+        output.extend(res);
+
+        let next_link = links
+            .get(&Some(String::from("next")))
+            .map(|link| Url::parse(&*link.raw_uri).unwrap());
+        maybe_url = next_link;
     }
+
     Ok(output)
 }
 

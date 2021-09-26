@@ -58,7 +58,7 @@ pub struct GhcupRepoConfig {
     #[structopt(long, help = "Ghcup gitlab repo", default_value = "haskell/ghcup-hs")]
     repo: String,
     #[structopt(long, help = "Gitlab fetch pagination", default_value = "100")]
-    pagination: usize,
+    per_page: usize,
 }
 
 impl Ghcup {

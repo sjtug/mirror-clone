@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use itertools::Itertools;
@@ -6,7 +7,7 @@ use slog::info;
 
 use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::Result;
-use crate::metadata::SnapshotMeta;
+use crate::metadata::{SnapshotMeta, SnapshotMetaFlag};
 use crate::traits::{Key, SnapshotStorage, SourceStorage};
 
 use super::utils::{fetch_last_tag, filter_map_file_objs, list_files};
@@ -63,7 +64,20 @@ impl SnapshotStorage<SnapshotMeta> for GhcupYaml {
         Ok(yaml_objs
             .into_iter()
             .map(|obj| format!("ghcup/data/{}", obj.name()))
-            .map(SnapshotMeta::force)
+            .map(|key| SnapshotMeta {
+                key,
+                last_modified: Some(
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                ),
+                flags: SnapshotMetaFlag {
+                    force: true,
+                    force_last: true,
+                },
+                ..Default::default()
+            })
             .collect())
     }
 

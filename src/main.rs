@@ -240,7 +240,7 @@ fn main() {
                     stream_pipe::ByteStreamPipe::new(
                         source.get_yaml(),
                         buffer_path.clone().unwrap(),
-                        false,
+                        true,
                     ),
                     buffer_path.clone().unwrap(),
                     yaml_rewrite_fn,
