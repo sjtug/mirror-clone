@@ -70,7 +70,6 @@ impl Ghcup {
     pub fn get_yaml(&self) -> GhcupYaml {
         GhcupYaml {
             ghcup_repo_config: self.ghcup_repo_config.clone(),
-            snapmeta_to_remote: Default::default(),
         }
     }
     pub fn get_packages(&self) -> GhcupPackages {

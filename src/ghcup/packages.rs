@@ -50,15 +50,11 @@ impl SnapshotStorage<SnapshotMeta> for GhcupPackages {
             )
         }
 
-        progress.set_message("downloading version file");
-        let yaml_url = format!(
-            "https://{}/api/v4/projects/{}/repository/blobs/{}/raw",
-            repo_config.host,
-            urlencoding::encode(&repo_config.repo),
-            latest_yaml_obj.id()
-        );
-
         progress.set_message("downloading yaml config");
+        let yaml_url = format!(
+            "https://www.haskell.org/ghcup/data/{}",
+            latest_yaml_obj.name()
+        );
         let yaml_data = client.get(&yaml_url).send().await?.bytes().await?;
         let ghcup_config: GhcupYamlParser = serde_yaml::from_slice(&yaml_data)?;
 
