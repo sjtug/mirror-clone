@@ -816,6 +816,7 @@ dependencies = [
  "structopt",
  "thiserror",
  "tokio",
+ "tokio-io-compat",
  "tokio-util",
  "url",
  "urlencoding",
@@ -1668,6 +1669,15 @@ dependencies = [
  "signal-hook-registry",
  "tokio-macros",
  "winapi",
+]
+
+[[package]]
+name = "tokio-io-compat"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80fb1f96432833513979efec5ff43275499822c2c07f0860ef90d2f734d1bfe5"
+dependencies = [
+ "tokio",
 ]
 
 [[package]]

@@ -38,6 +38,7 @@ slog-term = "2.6"
 structopt = "0.3"
 thiserror = "1.0"
 tokio = { version = "1.0", features = ["full"] }
+tokio-io-compat = "0.1"
 tokio-util = "0.6"
 url = "2.2"
 urlencoding = "2.1"
