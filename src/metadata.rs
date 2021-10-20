@@ -114,4 +114,12 @@ impl Metadata for SnapshotMeta {
     fn last_modified(&self) -> Option<u64> {
         self.last_modified
     }
+
+    fn checksum(&self) -> Option<&str> {
+        self.checksum.as_deref()
+    }
+
+    fn checksum_method(&self) -> Option<&str> {
+        self.checksum_method.as_deref()
+    }
 }

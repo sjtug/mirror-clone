@@ -3,10 +3,11 @@
 //! Crates.io source first download current crates.io-index zip from GitHub,
 //! and then extract downloadable crates from crates.io-index in memory.
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
+use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::Result;
 use crate::traits::{SnapshotStorage, SourceStorage};
 
+use crate::metadata::SnapshotMeta;
 use async_trait::async_trait;
 use serde::Deserialize;
 use slog::info;
@@ -34,12 +35,12 @@ pub struct CratesIo {
 }
 
 #[async_trait]
-impl SnapshotStorage<SnapshotPath> for CratesIo {
+impl SnapshotStorage<SnapshotMeta> for CratesIo {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<SnapshotPath>> {
+    ) -> Result<Vec<SnapshotMeta>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -73,7 +74,12 @@ impl SnapshotStorage<SnapshotPath> for CratesIo {
                         }
                         idx += 1;
                         progress.inc(1);
-                        snapshot.push(url);
+                        snapshot.push(SnapshotMeta {
+                            key: url,
+                            checksum_method: Some(String::from("sha256")),
+                            checksum: Some(package.cksum),
+                            ..Default::default()
+                        });
                     }
                 }
                 Ok(None) => break,
@@ -87,7 +93,7 @@ impl SnapshotStorage<SnapshotPath> for CratesIo {
 
         progress.finish_with_message("done");
 
-        Ok(crate::utils::snapshot_string_to_path(snapshot))
+        Ok(snapshot)
     }
 
     fn info(&self) -> String {
@@ -96,8 +102,11 @@ impl SnapshotStorage<SnapshotPath> for CratesIo {
 }
 
 #[async_trait]
-impl SourceStorage<SnapshotPath, TransferURL> for CratesIo {
-    async fn get_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<TransferURL> {
-        Ok(TransferURL(format!("{}/{}", self.crates_base, snapshot.0)))
+impl SourceStorage<SnapshotMeta, TransferURL> for CratesIo {
+    async fn get_object(&self, snapshot: &SnapshotMeta, _mission: &Mission) -> Result<TransferURL> {
+        Ok(TransferURL(format!(
+            "{}/{}",
+            self.crates_base, snapshot.key
+        )))
     }
 }

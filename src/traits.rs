@@ -42,6 +42,14 @@ pub trait Metadata {
     fn last_modified(&self) -> Option<u64> {
         None
     }
+
+    fn checksum(&self) -> Option<&str> {
+        None
+    }
+
+    fn checksum_method(&self) -> Option<&str> {
+        None
+    }
 }
 
 pub trait Diff {

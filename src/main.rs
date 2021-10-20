@@ -16,6 +16,7 @@ use simple_diff_transfer::SimpleDiffTransfer;
 use crate::github_release::GitHubRelease;
 use crate::homebrew::Homebrew;
 
+mod checksum_pipe;
 mod common;
 mod conda;
 mod crates_io;
@@ -53,6 +54,25 @@ macro_rules! index_bytes_pipe {
             );
             index_pipe::IndexPipe::new(
                 source,
+                $buffer_path.clone().unwrap(),
+                $prefix.clone().unwrap(),
+                $max_depth,
+            )
+        }
+    };
+}
+
+macro_rules! index_checksum_bytes_pipe {
+    ($buffer_path: expr, $prefix: expr, $use_snapshot_last_modified: expr, $max_depth: expr) => {
+        |source| {
+            let bytestream = stream_pipe::ByteStreamPipe::new(
+                source,
+                $buffer_path.clone().unwrap(),
+                $use_snapshot_last_modified,
+            );
+            let checksum = checksum_pipe::ChecksumPipe::new(bytestream);
+            index_pipe::IndexPipe::new(
+                checksum,
                 $buffer_path.clone().unwrap(),
                 $prefix.clone().unwrap(),
                 $max_depth,
@@ -148,7 +168,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, false, 999)
+                    index_checksum_bytes_pipe!(buffer_path, prefix, false, 999)
                 );
             }
             Source::CratesIo(source) => {
@@ -156,7 +176,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, false, 999)
+                    index_checksum_bytes_pipe!(buffer_path, prefix, false, 999)
                 );
             }
             Source::Conda(config) => {
@@ -165,7 +185,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, false, 999)
+                    index_checksum_bytes_pipe!(buffer_path, prefix, false, 999)
                 );
             }
             Source::Rsync(source) => {

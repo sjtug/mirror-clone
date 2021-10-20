@@ -6,7 +6,7 @@
 //! Reference: https://github.com/ustclug/ustcmirror-images/blob/master/homebrew-bottles/bottles-json/src/main.rs
 //! MIT License, Copyright (c) 2017 Jian Zeng
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
+use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
 use crate::timeout::{TryTimeoutExt, TryTimeoutFutureExt};
 use crate::traits::{SnapshotStorage, SourceStorage};
@@ -14,6 +14,7 @@ use crate::traits::{SnapshotStorage, SourceStorage};
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
+use crate::metadata::SnapshotMeta;
 use async_trait::async_trait;
 use serde::Deserialize;
 use slog::info;
@@ -77,12 +78,12 @@ impl Homebrew {
 }
 
 #[async_trait]
-impl SnapshotStorage<SnapshotPath> for Homebrew {
+impl SnapshotStorage<SnapshotMeta> for Homebrew {
     async fn snapshot(
         &mut self,
         mission: Mission,
         _config: &SnapshotConfig,
-    ) -> Result<Vec<SnapshotPath>> {
+    ) -> Result<Vec<SnapshotMeta>> {
         let logger = mission.logger;
         let progress = mission.progress;
         let client = mission.client;
@@ -133,7 +134,12 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
                                 );
                                 let key = crate::utils::rewrite_url_string(&gen_map, &key);
                                 self.url_mapping.insert(key.clone(), v.url);
-                                snapshots.push(SnapshotPath::new(key));
+                                snapshots.push(SnapshotMeta {
+                                    key,
+                                    checksum_method: Some(String::from("sha256")),
+                                    checksum: Some(v.sha256),
+                                    ..Default::default()
+                                });
                             }
                         }
                     }
@@ -152,11 +158,11 @@ impl SnapshotStorage<SnapshotPath> for Homebrew {
 }
 
 #[async_trait]
-impl SourceStorage<SnapshotPath, TransferURL> for Homebrew {
-    async fn get_object(&self, snapshot: &SnapshotPath, mission: &Mission) -> Result<TransferURL> {
+impl SourceStorage<SnapshotMeta, TransferURL> for Homebrew {
+    async fn get_object(&self, snapshot: &SnapshotMeta, mission: &Mission) -> Result<TransferURL> {
         let url = self
             .url_mapping
-            .get(&snapshot.0)
+            .get(&snapshot.key)
             .expect("no URL for bottle");
         let resp = mission
             .client

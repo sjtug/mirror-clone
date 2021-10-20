@@ -32,6 +32,12 @@ pub enum Error {
     YamlDecodeError(#[from] serde_yaml::Error),
     #[error("Datetime Parse Error {0}")]
     DatetimeParseError(#[from] chrono::ParseError),
+    #[error("Checksum mismatch ({method}). Expect {expected}, got {got}")]
+    ChecksumError {
+        method: String,
+        expected: String,
+        got: String,
+    },
 }
 
 impl<T: std::fmt::Debug> From<rusoto_core::RusotoError<T>> for Error {
