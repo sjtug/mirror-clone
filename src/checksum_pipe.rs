@@ -8,6 +8,7 @@ use std::io::{Error as IOError, ErrorKind, Result as IOResult, SeekFrom};
 
 use async_trait::async_trait;
 use sha2::Digest;
+use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncSeek, AsyncSeekExt};
 use tokio_io_compat::CompatHelperTrait;
 
@@ -80,20 +81,32 @@ where
         if let (Some(method), Some(expected_chksum)) =
             (snapshot.checksum_method(), snapshot.checksum())
         {
-            if let ByteObject::LocalFile { file: Some(f), .. } = &mut source.object {
-                let got_chksum = calc_checksum(f, method).await?;
-                if expected_chksum != got_chksum.as_str() {
-                    return Err(Error::ChecksumError {
-                        method: method.to_string(),
-                        expected: expected_chksum.to_string(),
-                        got: got_chksum,
-                    });
+            let got_chksum = match &mut source.object {
+                ByteObject::LocalFile { file: Some(f), .. } => calc_checksum(f, method).await?,
+                ByteObject::LocalFile {
+                    file: None,
+                    path: Some(path),
+                } => {
+                    let mut f = File::open(path).await?;
+                    calc_checksum(&mut f, method).await?
                 }
-            } else {
-                return Err(Error::IoError(IOError::new(
-                    ErrorKind::NotFound,
-                    "file missing",
-                )));
+                ByteObject::LocalFile {
+                    file: None,
+                    path: None,
+                } => {
+                    return Err(Error::IoError(IOError::new(
+                        ErrorKind::NotFound,
+                        "data missing",
+                    )));
+                }
+            };
+
+            if expected_chksum != got_chksum.as_str() {
+                return Err(Error::ChecksumError {
+                    method: method.to_string(),
+                    expected: expected_chksum.to_string(),
+                    got: got_chksum,
+                });
             }
         };
         Ok(source)
