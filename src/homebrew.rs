@@ -14,11 +14,11 @@ use crate::traits::{SnapshotStorage, SourceStorage};
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
+use crate::metadata::SnapshotMeta;
 use async_trait::async_trait;
 use serde::Deserialize;
 use slog::info;
 use structopt::StructOpt;
-use crate::metadata::SnapshotMeta;
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct HomebrewConfig {
@@ -134,7 +134,7 @@ impl SnapshotStorage<SnapshotMeta> for Homebrew {
                                 );
                                 let key = crate::utils::rewrite_url_string(&gen_map, &key);
                                 self.url_mapping.insert(key.clone(), v.url);
-                                snapshots.push(SnapshotMeta{
+                                snapshots.push(SnapshotMeta {
                                     key,
                                     checksum_method: Some(String::from("sha256")),
                                     checksum: Some(v.sha256),

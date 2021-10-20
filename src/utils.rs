@@ -1,13 +1,9 @@
 use std::convert::Infallible;
-use std::io::{Error, ErrorKind, Result as IOResult, SeekFrom};
 use std::str::FromStr;
 
 use indicatif::ProgressStyle;
 use regex::Regex;
-use sha2::Digest;
 use slog::{o, Drain};
-use tokio::io::{AsyncRead, AsyncSeek, AsyncSeekExt};
-use tokio_io_compat::CompatHelperTrait;
 
 use crate::common::SnapshotPath;
 use crate::error::Result;
@@ -137,24 +133,4 @@ pub fn unix_time() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("Time went backwards")
         .as_secs()
-}
-
-async fn sha256(source: &mut (impl AsyncRead + Unpin)) -> IOResult<String> {
-    let mut hasher = sha2::Sha256::new();
-    tokio::io::copy(source, &mut hasher.tokio_io_mut()).await?;
-    Ok(format!("{:x}", hasher.finalize()))
-}
-
-pub async fn calc_checksum(
-    source: &mut (impl AsyncRead + AsyncSeek + Unpin),
-    method: &str,
-) -> IOResult<String> {
-    source.seek(SeekFrom::Start(0)).await?;
-    match method {
-        "sha256" => sha256(source).await,
-        _ => Err(Error::new(
-            ErrorKind::Unsupported,
-            "unsupported checksum method",
-        )),
-    }
 }
