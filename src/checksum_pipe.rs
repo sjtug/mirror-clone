@@ -26,14 +26,18 @@ pub async fn calc_checksum(
     source: &mut (impl AsyncRead + AsyncSeek + Unpin),
     method: &str,
 ) -> IOResult<String> {
-    source.seek(SeekFrom::Start(0)).await?;
-    match method {
+    let orig_pos = source.seek(SeekFrom::Current(0)).await?;
+
+    let result = match method {
         "sha256" => sha256(source).await,
         _ => Err(IOError::new(
             ErrorKind::Unsupported,
             "unsupported checksum method",
         )),
-    }
+    };
+
+    source.seek(SeekFrom::Start(orig_pos)).await?;
+    result
 }
 
 pub struct ChecksumPipe<Source> {
