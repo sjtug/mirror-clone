@@ -185,7 +185,7 @@ fn main() {
                     opts,
                     source,
                     transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, false, 999)
+                    index_checksum_bytes_pipe!(buffer_path, prefix, false, 999)
                 );
             }
             Source::Rsync(source) => {
