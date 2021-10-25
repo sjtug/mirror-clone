@@ -320,6 +320,14 @@ fn main() {
 
                 transfer!(opts, indexed, transfer_config, id_pipe!());
             }
+            Source::Rustup(source) => {
+                transfer!(
+                    opts,
+                    source,
+                    transfer_config,
+                    index_bytes_pipe!(buffer_path, prefix, false, 999)
+                );
+            }
         }
     });
 }

@@ -4,18 +4,21 @@
 //! It is recommended to use it with `--no-delete` flag. This source
 //! yields path snapshots.
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath};
+use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
 use crate::error::{Error, Result};
-use crate::traits::SnapshotStorage;
+use crate::traits::{SnapshotStorage, SourceStorage};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use futures_util::{stream, StreamExt, TryStreamExt};
 use regex::Regex;
 use slog::{info, warn};
+use structopt::StructOpt;
 
-#[derive(Debug)]
+#[derive(Debug, StructOpt)]
 pub struct Rustup {
+    #[structopt(long, default_value = "https://static.rust-lang.org")]
     pub base: String,
+    #[structopt(long, default_value = "120")]
     pub days_to_retain: usize,
 }
 
@@ -50,7 +53,15 @@ impl SnapshotStorage<SnapshotPath> for Rustup {
             }
         }
 
-        let packages: Result<Vec<Vec<String>>> =
+        // cache 4x more stable toolchains
+        for day_back in self.days_to_retain..self.days_to_retain * 4 {
+            let now = Utc::now();
+            let day = day_earlier(now, day_back as i64).unwrap();
+            let day_string = day.format("%Y-%m-%d");
+            targets.push((day_string.to_string(), "stable".to_string()));
+        }
+
+        let packages: Result<Vec<Vec<SnapshotPath>>> =
             stream::iter(targets.into_iter().map(|(day_string, channel)| {
                 let client = client.clone();
                 let base = self.base.clone();
@@ -71,10 +82,12 @@ impl SnapshotStorage<SnapshotPath> for Rustup {
                     for capture in matcher.captures_iter(&data) {
                         let url = &capture[1];
                         let url = url.replace("https://static.rust-lang.org/", "");
-                        caps.push(url);
+                        caps.push(SnapshotPath::new(url));
                     }
+
+                    caps.push(SnapshotPath::force(target));
                     progress.inc(1);
-                    Ok::<Vec<String>, Error>(caps)
+                    Ok::<_, Error>(caps)
                 };
                 async move {
                     match func.await {
@@ -90,14 +103,32 @@ impl SnapshotStorage<SnapshotPath> for Rustup {
             .try_collect()
             .await;
 
-        let snapshot = packages?.into_iter().flatten().collect();
+        let mut snapshot: Vec<SnapshotPath> = packages?.into_iter().flatten().collect();
+
+        for channel in channels {
+            snapshot.push(SnapshotPath::force(format!(
+                "dist/channel-rust-{}.toml",
+                channel
+            )));
+            snapshot.push(SnapshotPath::force(format!(
+                "dist/channel-rust-{}.toml.sha256",
+                channel
+            )));
+        }
 
         progress.finish_with_message("done");
 
-        Ok(crate::utils::snapshot_string_to_path(snapshot))
+        Ok(snapshot)
     }
 
     fn info(&self) -> String {
         format!("rustup, {:?}", self)
+    }
+}
+
+#[async_trait]
+impl SourceStorage<SnapshotPath, TransferURL> for Rustup {
+    async fn get_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<TransferURL> {
+        Ok(TransferURL(format!("{}/{}", self.base, snapshot.0)))
     }
 }
