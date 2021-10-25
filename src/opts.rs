@@ -8,7 +8,7 @@ use crate::gradle::Gradle;
 use crate::homebrew::HomebrewConfig;
 use crate::pypi::Pypi as PypiConfig;
 use crate::rsync::Rsync as RsyncConfig;
-
+use crate::rustup::Rustup as RustupConfig;
 use crate::{
     error::{Error, Result},
     s3::S3Backend,
@@ -35,6 +35,8 @@ pub enum Source {
     Ghcup(GhcupConfig),
     #[structopt(about = "gradle")]
     Gradle(Gradle),
+    #[structopt(about = "rustup")]
+    Rustup(RustupConfig),
 }
 
 #[derive(Debug)]
