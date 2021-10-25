@@ -25,7 +25,6 @@ jobs:
         name: Setup Cargo Toolchain 🛎️
         with:
           components: rustfmt, clippy
-          toolchain: nightly
           default: true
       - uses: actions-rs/cargo@v1
         name: Compile all targets 🚀
