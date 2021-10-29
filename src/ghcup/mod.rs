@@ -53,12 +53,14 @@ pub struct Ghcup {
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct GhcupRepoConfig {
-    #[structopt(long, help = "Ghcup gitlab host", default_value = "gitlab.haskell.org")]
-    host: String,
-    #[structopt(long, help = "Ghcup gitlab repo", default_value = "haskell/ghcup-hs")]
+    #[structopt(
+        long,
+        help = "Ghcup github repo",
+        default_value = "haskell/ghcup-metadata"
+    )]
     repo: String,
-    #[structopt(long, help = "Gitlab fetch pagination", default_value = "100")]
-    per_page: usize,
+    #[structopt(long, help = "Ghcup github branch", default_value = "master")]
+    branch: String,
 }
 
 impl Ghcup {
@@ -68,9 +70,7 @@ impl Ghcup {
         }
     }
     pub fn get_yaml(&self) -> GhcupYaml {
-        GhcupYaml {
-            ghcup_repo_config: self.ghcup_repo_config.clone(),
-        }
+        GhcupYaml::new(self.ghcup_repo_config.clone())
     }
     pub fn get_packages(&self) -> GhcupPackages {
         GhcupPackages {

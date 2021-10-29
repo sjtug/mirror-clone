@@ -4,17 +4,16 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use reqwest::{header, Client};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use url::Url;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 use super::GhcupRepoConfig;
 
 lazy_static! {
     static ref YAML_CONFIG_PATTERN: regex::Regex =
-        regex::Regex::new(r"ghcup-(?P<ver>\d.\d.\d).yaml").unwrap();
+        regex::Regex::new(r"ghcup-(?P<ver>\d.\d.\d).yaml$").unwrap();
 }
 
 // order is reverted to derive Ord ;)
@@ -58,119 +57,99 @@ impl FromStr for Version {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileInfo {
-    id: String,
-    name: String,
+#[derive(Debug, Deserialize)]
+struct TreeMeta {
+    tree: Vec<FileMeta>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FileMeta {
     path: String,
+    #[serde(rename = "type")]
+    ty: NodeType,
+    url: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TagInfo {
-    name: String,
-    commit: CommitInfo,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommitInfo {
-    id: String,
-}
-
-impl TagInfo {
-    pub fn id(&self) -> &str {
-        &self.commit.id
-    }
+#[derive(Debug, Copy, Clone, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum NodeType {
+    Tree,
+    Blob,
 }
 
 #[derive(Debug, Clone)]
 pub struct ObjectInfo {
-    id: String,
-    name: String,
-    version: Version,
+    pub name: String,
+    pub path: String,
+    pub version: Version,
 }
 
-impl ObjectInfo {
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    pub fn version(&self) -> Version {
-        self.version
-    }
+#[derive(Debug, Clone)]
+pub struct ObjectInfoWithUrl {
+    pub name: String,
+    pub path: String,
+    pub version: Version,
+    pub url: String,
 }
 
-pub async fn fetch_last_tag(client: &Client, config: &GhcupRepoConfig) -> Result<String> {
-    let req = client.get(format!(
-        "https://{}/api/v4/projects/{}/repository/tags",
-        config.host,
-        urlencoding::encode(&*config.repo)
-    ));
-
-    let tags: Vec<TagInfo> = serde_json::from_slice(&*req.send().await?.bytes().await?)
-        .map_err(Error::JsonDecodeError)?;
-
-    Ok(tags
-        .first()
-        .ok_or_else(|| Error::ProcessError(String::from("no tag found")))?
-        .id()
-        .to_string())
+#[derive(Debug, Deserialize)]
+struct ContentMeta {
+    download_url: String,
 }
 
 pub async fn list_files(
     client: &Client,
     config: &GhcupRepoConfig,
-    commit: String,
-) -> Result<Vec<FileInfo>> {
-    let mut output = Vec::new();
+    commit: &str,
+) -> Result<Vec<FileMeta>> {
+    let tree_url = format!(
+        "https://api.github.com/repos/{}/git/trees/{}",
+        config.repo, commit
+    );
 
-    let mut initial_url = Url::parse(&*format!(
-        "https://{}/api/v4/projects/{}/repository/tree",
-        config.host,
-        urlencoding::encode(&*config.repo)
-    ))
-    .unwrap();
-    initial_url
-        .query_pairs_mut()
-        .append_pair("per_page", &*config.per_page.to_string())
-        .append_pair("pagination", "keyset")
-        .append_pair("ref", &*commit)
-        .append_pair("recursive", "true");
-
-    let mut maybe_url = Some(initial_url);
-    while let Some(url) = &mut maybe_url {
-        let resp = client.get(url.clone()).send().await?;
-
-        let links =
-            parse_link_header::parse(resp.headers().get(header::LINK).unwrap().to_str().unwrap())
-                .unwrap();
-
-        let res: Vec<FileInfo> =
-            serde_json::from_slice(&*resp.bytes().await?).map_err(Error::JsonDecodeError)?;
-        output.extend(res);
-
-        let next_link = links
-            .get(&Some(String::from("next")))
-            .map(|link| Url::parse(&*link.raw_uri).unwrap());
-        maybe_url = next_link;
-    }
-
-    Ok(output)
+    let tree_meta: TreeMeta = client.get(tree_url).send().await?.json().await?;
+    Ok(tree_meta
+        .tree
+        .into_iter()
+        .filter(|item| item.ty == NodeType::Blob)
+        .collect())
 }
 
 pub fn filter_map_file_objs(
-    files: impl IntoIterator<Item = FileInfo>,
+    files: impl IntoIterator<Item = FileMeta>,
 ) -> impl Iterator<Item = ObjectInfo> {
-    files.into_iter().filter_map(|f| {
-        YAML_CONFIG_PATTERN.captures(&*f.name).and_then(|c| {
+    files.into_iter().filter_map(|f: FileMeta| {
+        YAML_CONFIG_PATTERN.captures(&*f.path).and_then(|c| {
             c.name("ver").and_then(|m| {
+                let name = f.path.split('/').last().unwrap().to_string();
                 Some(ObjectInfo {
-                    id: f.id.clone(),
-                    name: f.name.clone(),
+                    name,
+                    path: f.path.clone(),
                     version: Version::from_str(m.as_str()).ok()?,
                 })
             })
         })
+    })
+}
+
+pub async fn get_raw_blob_url(
+    client: &Client,
+    config: &GhcupRepoConfig,
+    object: ObjectInfo,
+) -> Result<ObjectInfoWithUrl> {
+    let content: ContentMeta = client
+        .get(format!(
+            "https://api.github.com/repos/{}/contents/{}",
+            config.repo, object.path
+        ))
+        .send()
+        .await?
+        .json()
+        .await?;
+    Ok(ObjectInfoWithUrl {
+        name: object.name,
+        path: object.path,
+        version: object.version,
+        url: content.download_url,
     })
 }

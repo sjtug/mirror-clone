@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
+use futures_util::future::join_all;
 use itertools::Itertools;
 use slog::info;
 
@@ -9,12 +11,22 @@ use crate::error::Result;
 use crate::metadata::{SnapshotMeta, SnapshotMetaFlag};
 use crate::traits::{SnapshotStorage, SourceStorage};
 
-use super::utils::{fetch_last_tag, filter_map_file_objs, list_files};
+use super::utils::{filter_map_file_objs, get_raw_blob_url, list_files};
 use super::GhcupRepoConfig;
 
 #[derive(Debug, Clone)]
 pub struct GhcupYaml {
     pub ghcup_repo_config: GhcupRepoConfig,
+    name_url_map: HashMap<String, String>,
+}
+
+impl GhcupYaml {
+    pub fn new(ghcup_repo_config: GhcupRepoConfig) -> Self {
+        GhcupYaml {
+            ghcup_repo_config,
+            name_url_map: HashMap::new(),
+        }
+    }
 }
 
 #[async_trait]
@@ -31,21 +43,23 @@ impl SnapshotStorage<SnapshotMeta> for GhcupYaml {
 
         info!(logger, "fetching ghcup config...");
         progress.set_message("querying version files");
-        let yaml_objs = filter_map_file_objs(
-            list_files(
-                &client,
-                repo_config,
-                fetch_last_tag(&client, repo_config).await?,
-            )
-            .await?,
+        let yaml_objs: Vec<_> = join_all(
+            filter_map_file_objs(list_files(&client, repo_config, &repo_config.branch).await?)
+                .map(|obj| get_raw_blob_url(&client, repo_config, obj)),
         )
-        .collect_vec();
+        .await
+        .into_iter()
+        .try_collect()?;
 
         progress.finish_with_message("done");
 
         Ok(yaml_objs
             .into_iter()
-            .map(|obj| format!("ghcup/data/{}", obj.name()))
+            .map(|obj| {
+                let key = format!("ghcup/data/{}", obj.name);
+                self.name_url_map.insert(key.clone(), obj.url);
+                key
+            })
             .map(|key| SnapshotMeta {
                 key,
                 last_modified: Some(
@@ -71,9 +85,8 @@ impl SnapshotStorage<SnapshotMeta> for GhcupYaml {
 #[async_trait]
 impl SourceStorage<SnapshotMeta, TransferURL> for GhcupYaml {
     async fn get_object(&self, snapshot: &SnapshotMeta, _mission: &Mission) -> Result<TransferURL> {
-        Ok(TransferURL(format!(
-            "{}/{}",
-            "https://www.haskell.org", snapshot.key
-        )))
+        Ok(TransferURL(
+            self.name_url_map.get(&snapshot.key).unwrap().to_string(),
+        ))
     }
 }
