@@ -17,16 +17,6 @@ lazy_static! {
         regex::Regex::new(r"ghcup-(?P<ver>\d.\d.\d).yaml").unwrap();
 }
 
-macro_rules! t {
-    ($e: expr) => {
-        if let Ok(e) = $e {
-            e
-        } else {
-            return None;
-        }
-    };
-}
-
 // order is reverted to derive Ord ;)
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Version {
@@ -59,9 +49,9 @@ impl FromStr for Version {
             .collect_tuple()
             .and_then(|(major, minor, patch): (&str, &str, &str)| {
                 Some(Version::new(
-                    t!(major.parse()),
-                    t!(minor.parse()),
-                    t!(patch.parse()),
+                    major.parse().ok()?,
+                    minor.parse().ok()?,
+                    patch.parse().ok()?,
                 ))
             })
             .ok_or(())
@@ -178,7 +168,7 @@ pub fn filter_map_file_objs(
                 Some(ObjectInfo {
                     id: f.id.clone(),
                     name: f.name.clone(),
-                    version: t!(Version::from_str(m.as_str())),
+                    version: Version::from_str(m.as_str()).ok()?,
                 })
             })
         })
