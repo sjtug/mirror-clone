@@ -77,7 +77,8 @@ mod de {
 
                     while let Some(key) = map.next_key::<String>()? {
                         if key == "packages" || key == "packages.conda" {
-                            packages.append(&mut map.next_value_seed(Packages { repo: self.repo })?);
+                            packages
+                                .append(&mut map.next_value_seed(Packages { repo: self.repo })?);
                         } else {
                             map.next_value::<IgnoredAny>()?;
                         }
