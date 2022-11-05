@@ -31,7 +31,6 @@ pub struct GitHubReleaseAsset {
 #[derive(Deserialize, Debug)]
 pub struct GitHubReleaseItem {
     tag_name: String,
-    name: String,
     assets: Vec<GitHubReleaseAsset>,
 }
 
