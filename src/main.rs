@@ -30,6 +30,7 @@ mod gradle;
 mod homebrew;
 mod html_scanner;
 mod index_pipe;
+#[macro_use]
 mod merge_pipe;
 mod metadata;
 mod opts;
@@ -289,27 +290,13 @@ fn main() {
                     true,
                 );
 
-                let unified = merge_pipe::MergePipe::new(
-                    packages_src,
-                    merge_pipe::MergePipe::new(
-                        hls_src,
-                        merge_pipe::MergePipe::new(
-                            stack_src,
-                            merge_pipe::MergePipe::new(
-                                yaml_src,
-                                script_src,
-                                String::from("yaml"),
-                                Some(String::from("script")),
-                            ),
-                            String::from("stack"),
-                            None,
-                        ),
-                        String::from("hls"),
-                        None,
-                    ),
-                    String::from("packages"),
-                    None,
-                );
+                let unified = merge_pipe! {
+                    packages: packages_src,
+                    hls: hls_src,
+                    stack: stack_src,
+                    yaml: yaml_src,
+                    script: script_src,
+                };
 
                 let indexed = index_pipe::IndexPipe::new(
                     unified,
