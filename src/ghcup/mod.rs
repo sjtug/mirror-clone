@@ -69,8 +69,8 @@ impl Ghcup {
             script_url: self.script_url.clone(),
         }
     }
-    pub fn get_yaml(&self) -> GhcupYaml {
-        GhcupYaml::new(self.ghcup_repo_config.clone())
+    pub fn get_yaml(&self, legacy: bool) -> GhcupYaml {
+        GhcupYaml::new(self.ghcup_repo_config.clone(), legacy)
     }
     pub fn get_packages(&self) -> GhcupPackages {
         GhcupPackages {

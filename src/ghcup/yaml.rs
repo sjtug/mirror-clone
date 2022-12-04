@@ -17,13 +17,20 @@ use super::GhcupRepoConfig;
 #[derive(Debug, Clone)]
 pub struct GhcupYaml {
     pub ghcup_repo_config: GhcupRepoConfig,
+    path_prefix: &'static str,
     name_url_map: HashMap<String, String>,
 }
 
 impl GhcupYaml {
-    pub fn new(ghcup_repo_config: GhcupRepoConfig) -> Self {
+    pub fn new(ghcup_repo_config: GhcupRepoConfig, legacy: bool) -> Self {
+        let path_prefix = if legacy {
+            "ghcup/data"
+        } else {
+            "haskell/ghcup-metadata/master"
+        };
         GhcupYaml {
             ghcup_repo_config,
+            path_prefix,
             name_url_map: HashMap::new(),
         }
     }
@@ -56,7 +63,7 @@ impl SnapshotStorage<SnapshotMeta> for GhcupYaml {
         Ok(yaml_objs
             .into_iter()
             .map(|obj| {
-                let key = format!("ghcup/data/{}", obj.name);
+                let key = format!("{}/{}", self.path_prefix, obj.name);
                 self.name_url_map.insert(key.clone(), obj.url);
                 key
             })

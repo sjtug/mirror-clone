@@ -5,7 +5,7 @@ use std::str::FromStr;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::error::Result;
 

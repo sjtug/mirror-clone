@@ -257,15 +257,21 @@ fn main() {
                             Path::new(&target_mirror).join("hls").to_str().unwrap(),
                         ))
                 };
-                let yaml_src = rewrite_pipe::RewritePipe::new(
+                let yaml_legacy_src = rewrite_pipe::RewritePipe::new(
                     stream_pipe::ByteStreamPipe::new(
-                        source.get_yaml(),
+                        source.get_yaml(true),
                         buffer_path.clone().unwrap(),
                         true,
                     ),
                     buffer_path.clone().unwrap(),
                     yaml_rewrite_fn,
                     999999,
+                );
+
+                let yaml_src = stream_pipe::ByteStreamPipe::new(
+                    source.get_yaml(false),
+                    buffer_path.clone().unwrap(),
+                    true,
                 );
 
                 let packages_src = stream_pipe::ByteStreamPipe::new(
@@ -294,7 +300,8 @@ fn main() {
                     packages: packages_src,
                     hls: hls_src,
                     stack: stack_src,
-                    yaml: yaml_src,
+                    yaml: yaml_legacy_src,
+                    yaml_v2: yaml_src,
                     script: script_src,
                 };
 

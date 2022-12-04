@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use super::utils::Version;
 
-pub const EXPECTED_CONFIG_VERSION: Version = Version::new(0, 0, 6);
+pub const EXPECTED_CONFIG_VERSION: Version = Version::new(0, 0, 7);
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +20,7 @@ type BinarySource = HashMap<String, DownloadSource>;
 #[serde(rename_all = "camelCase")]
 pub struct Release {
     pub vi_tags: Vec<String>,
+    #[serde(rename(deserialize = "viSourceDL"))]
     pub vi_source_dl: Option<DownloadSource>,
     pub vi_arch: HashMap<String, DistributionRelease>,
 }
