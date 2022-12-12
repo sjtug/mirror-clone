@@ -109,7 +109,7 @@ impl SnapshotStorage<SnapshotMeta> for Rsync {
                 if permission.starts_with("-r") {
                     let datetime = timezone
                         .datetime_from_str(&format!("{} {}", date, time), "%Y/%m/%d %H:%M:%S")?;
-                    let size = size.replace(",", "");
+                    let size = size.replace(',', "");
                     let meta = SnapshotMeta {
                         key: file.to_string(),
                         size: Some(size.parse().unwrap()),
