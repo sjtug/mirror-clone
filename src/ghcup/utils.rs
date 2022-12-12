@@ -119,7 +119,7 @@ pub fn filter_map_file_objs(
     files: impl IntoIterator<Item = FileMeta>,
 ) -> impl Iterator<Item = ObjectInfo> {
     files.into_iter().filter_map(|f: FileMeta| {
-        YAML_CONFIG_PATTERN.captures(&*f.path).and_then(|c| {
+        YAML_CONFIG_PATTERN.captures(&f.path).and_then(|c| {
             c.name("ver").and_then(|m| {
                 let name = f.path.split('/').last().unwrap().to_string();
                 Some(ObjectInfo {
