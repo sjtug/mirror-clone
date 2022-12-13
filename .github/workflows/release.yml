@@ -14,25 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         name: Checkout 🛎️
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-release
-      - uses: actions-rs/toolchain@v1
+      - name: Install musl toolchain
+        run: sudo apt-get install -y musl-tools
+      - uses: dtolnay/rust-toolchain@stable
         name: Setup Cargo Toolchain 🛎️
         with:
-          components: rustfmt, clippy
-          default: true
-      - uses: actions-rs/cargo@v1
-        name: Compile all targets 🚀
-        with:
-          command: build
-          args: --workspace --release
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - name: Compile all targets 🚀
+        run: cargo build --release --target x86_64-unknown-linux-musl
       - name: create tar
-        run: tar -cvzf mirror-clone.tar.gz -C target/release mirror-clone
+        run: tar -cvzf mirror-clone.tar.gz -C target/x86_64-unknown-linux-musl/release mirror-clone
       - uses: actions/create-release@latest
         id: create_release
         env:
