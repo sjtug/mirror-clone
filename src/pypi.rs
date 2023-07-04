@@ -316,7 +316,6 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
                         } else {
                             caps
                         };
-                        info!(&logger, "selected versions: {:#?}", caps);
                         progress.inc(1);
                         Ok::<Vec<(String, String)>, Error>(caps)
                     }
