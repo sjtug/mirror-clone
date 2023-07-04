@@ -197,6 +197,7 @@ fn version(input: &str) -> IResult<&str, Version> {
 
 #[cfg(test)]
 mod tests {
+    use itertools::Itertools;
     use rstest::rstest;
 
     use super::Version;
@@ -254,11 +255,19 @@ mod tests {
     #[case("1.0.15")]
     #[case("1.1.dev1")]
     fn test_parse(#[case] input: &str) {
-        insta::with_settings!({
-            snapshot_suffix => input,
-        }, {
-            insta::assert_debug_snapshot!(Version::parse(input));
-        });
+        let case_name = input
+            .chars()
+            .map(|c| {
+                if c.is_uppercase() {
+                    format!("^{}", c.to_lowercase())
+                } else {
+                    c.to_string()
+                }
+            })
+            .join("")
+            .replace('\t', ">t")
+            .replace('\n', ">n");
+        insta::assert_debug_snapshot!(case_name, Version::parse(input));
     }
 
     #[rstest]
