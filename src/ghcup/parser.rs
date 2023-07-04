@@ -30,11 +30,9 @@ impl Release {
         let mut binary_uris: HashSet<&str> = self
             .vi_arch
             .values()
-            .into_iter()
             .flat_map(|dist| {
                 dist.values()
-                    .into_iter()
-                    .flat_map(|bin_src| bin_src.values().into_iter().map(|src| src.dl_uri.as_str()))
+                    .flat_map(|bin_src| bin_src.values().map(|src| src.dl_uri.as_str()))
             })
             .collect();
         if let Some(src) = self.vi_source_dl.as_ref() {
@@ -71,7 +69,7 @@ impl Components {
         fields
             .iter()
             .flat_map(|field| {
-                field.values().into_iter().flat_map(|release| {
+                field.values().flat_map(|release| {
                     if !include_old_versions && release.is_old() {
                         HashSet::new()
                     } else {

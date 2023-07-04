@@ -110,8 +110,8 @@ impl Index {
             data += &format!(r#"<tr><td><a href="../{}">..</a></td></tr>"#, list_key);
             data += &self
                 .prefixes
-                .iter()
-                .map(|(key, _)| {
+                .keys()
+                .map(|key| {
                     format!(
                         r#"<tr><td><a href="{}/{}">{}/</a></td></tr>"#,
                         urlencoding::encode(key),
