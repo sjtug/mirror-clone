@@ -157,12 +157,10 @@ fn main() {
             .or_else(|| Some(String::from("Root")));
         match opts.source {
             Source::Pypi(source) => {
-                transfer!(
-                    opts,
-                    source,
-                    transfer_config,
-                    index_bytes_pipe!(buffer_path, prefix, false, 2)
-                );
+                let pipe = |source| {
+                    stream_pipe::ByteStreamPipe::new(source, buffer_path.clone().unwrap(), false)
+                };
+                transfer!(opts, source, transfer_config, pipe);
             }
             Source::Homebrew(config) => {
                 let source = Homebrew::new(config);
