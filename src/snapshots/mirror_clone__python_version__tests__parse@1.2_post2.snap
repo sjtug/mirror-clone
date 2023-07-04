@@ -1,0 +1,19 @@
+---
+source: src/python_version.rs
+expression: "Version::parse(input)"
+---
+Ok(
+    Version {
+        epoch: 0,
+        chunks: [
+            1,
+            2,
+        ],
+        pre: None,
+        post: Some(
+            2,
+        ),
+        dev: None,
+        local: None,
+    },
+)

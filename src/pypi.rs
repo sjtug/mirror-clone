@@ -8,38 +8,190 @@
 //!
 //! Pypi supports path snapshot, and TransferURL source object.
 
-use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
-use crate::error::{Error, Result};
-use crate::traits::{SnapshotStorage, SourceStorage};
-use crate::utils::bar;
+use std::env;
 
 use async_trait::async_trait;
 use futures_util::{stream, StreamExt, TryStreamExt};
+use gcp_bigquery_client::error::BQError;
+use gcp_bigquery_client::model::job_configuration_query::JobConfigurationQuery;
 use regex::Regex;
-use slog::{info, warn};
+use reqwest::Client;
+use serde_json::Value;
+use slog::{info, warn, Logger};
 use structopt::StructOpt;
+
+use crate::common::{Mission, SnapshotConfig, SnapshotPath, TransferURL};
+use crate::error::{Error, Result};
+use crate::python_version::Version;
+use crate::traits::{SnapshotStorage, SourceStorage};
+use crate::utils::bar;
+
+const BQ_QUERY: &str = r#"
+    SELECT file.project, COUNT(*) AS num_downloads
+    FROM `bigquery-public-data.pypi.file_downloads`
+    WHERE
+      details.installer.name = 'pip'
+      AND
+      DATE(timestamp)
+        BETWEEN DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+        AND CURRENT_DATE()
+    GROUP BY file.project
+    ORDER BY num_downloads DESC
+    LIMIT 1000;
+    "#;
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct Pypi {
     /// Base of simple index
     #[structopt(
         long,
-        default_value = "https://nanomirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+        default_value = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
         help = "Base of simple index"
     )]
     pub simple_base: String,
     /// Base of package base
     #[structopt(
         long,
-        default_value = "https://nanomirrors.tuna.tsinghua.edu.cn/pypi/web/packages",
+        default_value = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages",
         help = "Base of package index"
     )]
     pub package_base: String,
+    /// When set, the source will query bigquery for indexing and only the first 1000 most
+    /// downloaded packages will be selected.
+    /// Please consider adding `--no-delete` parameter on simple diff transfer to avoid clearing
+    /// previous cache.
+    #[structopt(long)]
+    pub bq_query: bool,
+    /// Only keep recent N versions per package.
+    /// Please consider adding `--no-delete` parameter on simple diff transfer to avoid clearing
+    /// previous cache.
+    #[structopt(long)]
+    pub keep_recent: Option<usize>,
     /// When debug mode is enabled, only first 1000 packages will be selected.
     /// Please add `--no-delete` parameter on simple diff transfer when enabling
     /// debug mode on a production endpoint.
     #[structopt(long)]
     pub debug: bool,
+}
+
+async fn pypi_index(
+    logger: &Logger,
+    client: &Client,
+    simple_base: &str,
+    debug: bool,
+) -> Result<Vec<String>> {
+    info!(logger, "downloading pypi index...");
+    let mut index = client
+        .get(&format!("{}/", simple_base))
+        .send()
+        .await?
+        .text()
+        .await?;
+
+    info!(logger, "parsing index...");
+    let matcher = Regex::new(r#"<a.*href=".*?".*>(.*?)</a>"#).unwrap();
+    if debug {
+        index = index[..1000].to_string();
+    }
+    Ok(matcher
+        .captures_iter(&index)
+        .map(|cap| cap[1].to_string())
+        .collect())
+}
+
+async fn bigquery_index(logger: &Logger) -> Result<Vec<String>> {
+    info!(logger, "executing bigquery query...");
+    let prj_id = env::var("PROJECT_ID").expect("Environment variable PROJECT_ID");
+    let cred = env::var("GOOGLE_APPLICATION_CREDENTIALS")
+        .expect("Environment variable GOOGLE_APPLICATION_CREDENTIALS");
+    let client = gcp_bigquery_client::Client::from_service_account_key_file(&cred).await?;
+
+    let mut query_config = JobConfigurationQuery::default();
+    query_config.query = BQ_QUERY.to_string();
+    query_config.use_legacy_sql = Some(false);
+    Ok(client
+        .job()
+        .query_all(&prj_id, query_config, None)
+        .map_ok(|page| {
+            stream::iter(page.into_iter().map(|row| {
+                let mut row = row.columns.expect("columns");
+                let project = match row.swap_remove(0).value {
+                    Some(Value::String(s)) => s,
+                    _ => panic!("invalid project name"),
+                };
+                Ok::<_, BQError>(project)
+            }))
+        })
+        .try_flatten()
+        .try_collect()
+        .await?)
+}
+
+fn version_from_filename(filename: &str) -> Option<Version> {
+    static RE_VERSION: once_cell::sync::Lazy<Regex> = once_cell::sync::Lazy::new(|| {
+        Regex::new(r#"^\w+-([\w.-_+]+).*(.tar.gz|tar.bz2|.zip|.whl|.exe|.egg)$"#).unwrap()
+    });
+    RE_VERSION
+        .captures(filename)
+        .and_then(|cap| cap.get(1))
+        .and_then(|cap| Version::parse(cap.as_str()).ok())
+}
+
+fn truncate_to_recent(
+    logger: &Logger,
+    package: &str,
+    entries: Vec<(String, String)>,
+    keep_recent: usize,
+) -> Vec<(String, String)> {
+    let candidates: Option<Vec<_>> = entries
+        .iter()
+        .map(|(url, name)| {
+            if let Some(version) = version_from_filename(name) {
+                Some((url, name, version))
+            } else {
+                warn!(logger, "failed to parse version from filename: {}", name);
+                None
+            }
+        })
+        .collect();
+    if let Some(mut candidates) = candidates {
+        candidates.sort_by_key(|(_, _, version)| version.clone());
+        let mut result = vec![];
+        let at_most_unstable = keep_recent / 2;
+        let mut selected_count = 0;
+        let mut selected_unstable_count = 0;
+        let mut prev = None;
+        for (url, name, version) in candidates.into_iter().rev() {
+            if prev.as_ref() == Some(&version) {
+                // Another file of this version is already selected. Select this too.
+                result.push((url.clone(), name.clone()));
+                continue;
+            }
+            if selected_count >= keep_recent {
+                // There's enough versions, stop here.
+                break;
+            }
+
+            // A new version is encountered.
+            if version.is_stable() {
+                // We'd like to pick stable versions first.
+                result.push((url.clone(), name.clone()));
+            } else {
+                // If it's not an unstable version, pick it only if we haven't selected enough.
+                if selected_unstable_count >= at_most_unstable {
+                    continue;
+                }
+                result.push((url.clone(), name.clone()));
+                selected_unstable_count += 1;
+            }
+            prev = Some(version);
+            selected_count += 1;
+        }
+        result
+    } else {
+        warn!(logger, "give up keep_recent for package: {}", package);
+        entries
+    }
 }
 
 #[async_trait]
@@ -53,55 +205,57 @@ impl SnapshotStorage<SnapshotPath> for Pypi {
         let progress = mission.progress;
         let client = mission.client;
 
-        info!(logger, "downloading pypi index...");
-        let mut index = client
-            .get(&format!("{}/", self.simple_base))
-            .send()
-            .await?
-            .text()
-            .await?;
-        let matcher = Regex::new(r#"<a.*href="(.*?)".*>(.*?)</a>"#).unwrap();
-
-        info!(logger, "parsing index...");
-        if self.debug {
-            index = index[..1000].to_string();
-        }
-        let caps: Vec<(String, String)> = matcher
-            .captures_iter(&index)
-            .map(|cap| (cap[1].to_string(), cap[2].to_string()))
-            .collect();
+        let projects = if self.bq_query {
+            if self.debug {
+                warn!(logger, "debug mode is ignored in bigquery mode");
+            }
+            bigquery_index(&logger).await?
+        } else {
+            pypi_index(&logger, &client, &self.simple_base, self.debug).await?
+        };
 
         info!(logger, "downloading package index...");
-        progress.set_length(caps.len() as u64);
+        progress.set_length(projects.len() as u64);
         progress.set_style(bar());
 
+        let matcher = Regex::new(r#"<a.*href="(.*?)".*>(.*?)</a>"#).unwrap();
         let packages: Result<Vec<Vec<(String, String)>>> =
-            stream::iter(caps.into_iter().map(|(url, name)| {
+            stream::iter(projects.into_iter().map(|name| {
                 let client = client.clone();
                 let simple_base = self.simple_base.clone();
+                let keep_recent = self.keep_recent;
                 let progress = progress.clone();
                 let matcher = matcher.clone();
                 let logger = logger.clone();
 
-                let func = async move {
-                    progress.set_message(&name);
-                    let package = client
-                        .get(&format!("{}/{}", simple_base, url))
-                        .send()
-                        .await?
-                        .text()
-                        .await?;
-                    let caps: Vec<(String, String)> = matcher
-                        .captures_iter(&package)
-                        .map(|cap| {
-                            let url = format!("{}/{}{}", simple_base, url, &cap[1]);
-                            let parsed = url::Url::parse(&url).unwrap();
-                            let cleaned: &str = &parsed[..url::Position::AfterPath];
-                            (cleaned.to_string(), cap[2].to_string())
-                        })
-                        .collect();
-                    progress.inc(1);
-                    Ok::<Vec<(String, String)>, Error>(caps)
+                let func = {
+                    let logger = logger.clone();
+                    async move {
+                        progress.set_message(&name);
+                        let package = client
+                            .get(&format!("{}/{}/", simple_base, name))
+                            .send()
+                            .await?
+                            .text()
+                            .await?;
+                        let caps: Vec<(String, String)> = matcher
+                            .captures_iter(&package)
+                            .map(|cap| {
+                                let url = format!("{}/{}/{}", simple_base, name, &cap[1]);
+                                let parsed = url::Url::parse(&url).unwrap();
+                                let cleaned: &str = &parsed[..url::Position::AfterPath];
+                                (cleaned.to_string(), cap[2].to_string())
+                            })
+                            .collect();
+                        let caps = if let Some(keep_recent) = keep_recent {
+                            truncate_to_recent(&logger, &name, caps, keep_recent)
+                        } else {
+                            caps
+                        };
+                        info!(&logger, "selected versions: {:#?}", caps);
+                        progress.inc(1);
+                        Ok::<Vec<(String, String)>, Error>(caps)
+                    }
                 };
                 async move {
                     match func.await {
