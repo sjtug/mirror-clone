@@ -106,9 +106,11 @@ async fn bigquery_index(logger: &Logger) -> Result<Vec<String>> {
         .expect("Environment variable GOOGLE_APPLICATION_CREDENTIALS");
     let client = gcp_bigquery_client::Client::from_service_account_key_file(&cred).await?;
 
-    let mut query_config = JobConfigurationQuery::default();
-    query_config.query = BQ_QUERY.to_string();
-    query_config.use_legacy_sql = Some(false);
+    let query_config = JobConfigurationQuery {
+        query: BQ_QUERY.to_string(),
+        use_legacy_sql: Some(false),
+        ..Default::default()
+    };
     Ok(client
         .job()
         .query_all(&prj_id, query_config, None)
