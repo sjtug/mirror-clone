@@ -12,8 +12,15 @@ use std::env;
 
 use async_trait::async_trait;
 use futures_util::{stream, StreamExt, TryStreamExt};
-use gcp_bigquery_client::error::BQError;
-use gcp_bigquery_client::model::job_configuration_query::JobConfigurationQuery;
+use google_bigquery2::api::QueryRequest;
+use google_bigquery2::hyper::client::HttpConnector;
+use google_bigquery2::hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
+use google_bigquery2::oauth2::authenticator::ApplicationDefaultCredentialsTypes;
+use google_bigquery2::oauth2::{
+    ApplicationDefaultCredentialsAuthenticator, ApplicationDefaultCredentialsFlowOpts,
+};
+use google_bigquery2::{hyper, Bigquery};
+use hyper_proxy::{Intercept, Proxy, ProxyConnector};
 use regex::Regex;
 use reqwest::Client;
 use serde_json::Value;
@@ -99,34 +106,89 @@ async fn pypi_index(
         .collect())
 }
 
+macro_rules! append_proxy_from_env {
+    ($proxies:expr, $env_name:expr, $intercept:expr) => {
+        if let Ok(proxy) = env::var($env_name) {
+            $proxies.push(Proxy::new($intercept, proxy.parse().expect($env_name)));
+        }
+    };
+}
+
+fn collect_proxies() -> Vec<Proxy> {
+    let mut proxies = vec![];
+
+    // TODO: priority?
+    append_proxy_from_env!(proxies, "http_proxy", Intercept::Http);
+    append_proxy_from_env!(proxies, "HTTP_PROXY", Intercept::Http);
+    append_proxy_from_env!(proxies, "https_proxy", Intercept::Https);
+    append_proxy_from_env!(proxies, "HTTPS_PROXY", Intercept::Https);
+    append_proxy_from_env!(proxies, "all_proxy", Intercept::All);
+    append_proxy_from_env!(proxies, "ALL_PROXY", Intercept::All);
+
+    proxies
+}
+
+fn hyper_client() -> Result<hyper::Client<ProxyConnector<HttpsConnector<HttpConnector>>>> {
+    let raw_connector = HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .https_or_http()
+        .enable_http1()
+        .enable_http2()
+        .build();
+    let mut connector = ProxyConnector::new(raw_connector)?;
+    connector.extend_proxies(collect_proxies());
+    Ok(hyper::Client::builder().build(connector))
+}
+
+async fn bigquery_hub() -> Result<Bigquery<ProxyConnector<HttpsConnector<HttpConnector>>>> {
+    let hyper = hyper_client()?;
+    let auth = match ApplicationDefaultCredentialsAuthenticator::with_client(
+        ApplicationDefaultCredentialsFlowOpts::default(),
+        hyper.clone(),
+    )
+    .await
+    {
+        ApplicationDefaultCredentialsTypes::ServiceAccount(authenticator) => {
+            authenticator.build().await?
+        }
+        ApplicationDefaultCredentialsTypes::InstanceMetadata(authenticator) => {
+            authenticator.build().await?
+        }
+    };
+    Ok(Bigquery::new(hyper, auth))
+}
+
 async fn bigquery_index(logger: &Logger) -> Result<Vec<String>> {
     info!(logger, "executing bigquery query...");
     let prj_id = env::var("PROJECT_ID").expect("Environment variable PROJECT_ID");
-    let cred = env::var("GOOGLE_APPLICATION_CREDENTIALS")
-        .expect("Environment variable GOOGLE_APPLICATION_CREDENTIALS");
-    let client = gcp_bigquery_client::Client::from_service_account_key_file(&cred).await?;
 
-    let query_config = JobConfigurationQuery {
-        query: BQ_QUERY.to_string(),
-        use_legacy_sql: Some(false),
-        ..Default::default()
-    };
-    Ok(client
-        .job()
-        .query_all(&prj_id, query_config, None)
-        .map_ok(|page| {
-            stream::iter(page.into_iter().map(|row| {
-                let mut row = row.columns.expect("columns");
-                let project = match row.swap_remove(0).value {
-                    Some(Value::String(s)) => s,
-                    _ => panic!("invalid project name"),
-                };
-                Ok::<_, BQError>(project)
-            }))
+    let hub = bigquery_hub().await?;
+
+    let (_, resp) = hub
+        .jobs()
+        .query(
+            QueryRequest {
+                query: Some(BQ_QUERY.to_string()),
+                use_legacy_sql: Some(false),
+                ..Default::default()
+            },
+            &prj_id,
+        )
+        .doit()
+        .await?;
+
+    Ok(resp
+        .rows
+        .expect("rows")
+        .into_iter()
+        .map(|row| {
+            let row = row.f.expect("columns");
+            match row.into_iter().next().expect("project").v {
+                Some(Value::String(s)) => s,
+                _ => panic!("invalid project name"),
+            }
         })
-        .try_flatten()
-        .try_collect()
-        .await?)
+        .collect())
 }
 
 fn version_from_filename(filename: &str) -> Option<Version> {
