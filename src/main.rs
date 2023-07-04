@@ -35,6 +35,7 @@ mod merge_pipe;
 mod metadata;
 mod opts;
 mod pypi;
+mod python_version;
 mod rewrite_pipe;
 mod rsync;
 mod rustup;

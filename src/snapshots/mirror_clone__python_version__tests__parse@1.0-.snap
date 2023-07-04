@@ -1,0 +1,10 @@
+---
+source: src/python_version.rs
+expression: "Version::parse(input)"
+---
+Err(
+    Error {
+        input: "-",
+        code: Eof,
+    },
+)

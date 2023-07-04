@@ -38,6 +38,8 @@ pub enum Error {
         expected: String,
         got: String,
     },
+    #[error("GCP BigQuery Error {0}")]
+    BQError(#[from] gcp_bigquery_client::error::BQError),
 }
 
 impl<T: std::fmt::Debug> From<rusoto_core::RusotoError<T>> for Error {
