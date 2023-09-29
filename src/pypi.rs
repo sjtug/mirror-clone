@@ -193,7 +193,7 @@ async fn bigquery_index(logger: &Logger) -> Result<Vec<String>> {
 
 fn version_from_filename(filename: &str) -> Option<Version> {
     static RE_VERSION: once_cell::sync::Lazy<Regex> = once_cell::sync::Lazy::new(|| {
-        Regex::new(r#"^\w+-([\w.-_+]+).*(.tar.gz|tar.bz2|.zip|.whl|.exe|.egg)$"#).unwrap()
+        Regex::new(r"^\w+-([\w.-_+]+).*(.tar.gz|tar.bz2|.zip|.whl|.exe|.egg)$").unwrap()
     });
     RE_VERSION
         .captures(filename)

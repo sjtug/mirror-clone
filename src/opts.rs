@@ -6,6 +6,7 @@ use crate::ghcup::Ghcup as GhcupConfig;
 use crate::github_release::GitHubRelease;
 use crate::gradle::Gradle;
 use crate::homebrew::HomebrewConfig;
+use crate::lean::elan::ElanConfig;
 use crate::pypi::Pypi as PypiConfig;
 use crate::rsync::Rsync as RsyncConfig;
 use crate::rustup::Rustup as RustupConfig;
@@ -37,6 +38,8 @@ pub enum Source {
     Gradle(Gradle),
     #[structopt(about = "rustup")]
     Rustup(RustupConfig),
+    #[structopt(about = "elan")]
+    Elan(ElanConfig),
 }
 
 #[derive(Debug)]
