@@ -32,6 +32,7 @@ mod html_scanner;
 mod index_pipe;
 #[macro_use]
 mod merge_pipe;
+mod lean;
 mod metadata;
 mod opts;
 mod pypi;
@@ -226,7 +227,7 @@ fn main() {
                 let script_src = rewrite_pipe::RewritePipe::new(
                     stream_pipe::ByteStreamPipe::new(
                         source.get_script(),
-                        buffer_path.clone().unwrap(),
+                        buffer_path.clone().expect("buffer path is not present"),
                         false,
                     ),
                     buffer_path.clone().unwrap(),
@@ -320,6 +321,36 @@ fn main() {
                     transfer_config,
                     index_bytes_pipe!(buffer_path, prefix, false, 999)
                 );
+            }
+            Source::Elan(source) => {
+                let elan_src = stream_pipe::ByteStreamPipe::new(
+                    GitHubRelease::new(
+                        String::from("leanprover/elan"),
+                        source.retain_elan_versions,
+                    ),
+                    buffer_path.clone().unwrap(),
+                    true,
+                );
+                let lean_src = stream_pipe::ByteStreamPipe::new(
+                    GitHubRelease::new(
+                        String::from("leanprover/lean4"),
+                        source.retain_lean_versions,
+                    ),
+                    buffer_path.clone().unwrap(),
+                    true,
+                );
+                let unified = merge_pipe! {
+                    elan: elan_src,
+                    lean: lean_src,
+                };
+                let indexed = index_pipe::IndexPipe::new(
+                    unified,
+                    buffer_path.clone().unwrap(),
+                    prefix.clone().unwrap(),
+                    999,
+                );
+
+                transfer!(opts, indexed, transfer_config, id_pipe!());
             }
         }
     });
