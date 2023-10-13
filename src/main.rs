@@ -339,9 +339,12 @@ fn main() {
                     buffer_path.clone().unwrap(),
                     true,
                 );
+                let lean_org_repo_src = merge_pipe! {
+                    lean4: lean_src,
+                };
                 let unified = merge_pipe! {
                     elan: elan_src,
-                    lean: lean_src,
+                    leanprover: lean_org_repo_src,
                 };
                 let indexed = index_pipe::IndexPipe::new(
                     unified,
