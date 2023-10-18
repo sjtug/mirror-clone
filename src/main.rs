@@ -331,6 +331,11 @@ fn main() {
                     buffer_path.clone().unwrap(),
                     true,
                 );
+                let glean_src = stream_pipe::ByteStreamPipe::new(
+                    GitHubRelease::new(String::from("alissa-tung/glean"), 1),
+                    buffer_path.clone().unwrap(),
+                    true,
+                );
                 let lean_src = stream_pipe::ByteStreamPipe::new(
                     GitHubRelease::new(
                         String::from("leanprover/lean4"),
