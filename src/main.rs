@@ -331,6 +331,14 @@ fn main() {
                     buffer_path.clone().unwrap(),
                     true,
                 );
+                let glean_src = stream_pipe::ByteStreamPipe::new(
+                    GitHubRelease::new(
+                        String::from("alissa-tung/glean"),
+                        source.retain_glean_versions,
+                    ),
+                    buffer_path.clone().unwrap(),
+                    true,
+                );
                 let lean_src = stream_pipe::ByteStreamPipe::new(
                     GitHubRelease::new(
                         String::from("leanprover/lean4"),
@@ -339,12 +347,22 @@ fn main() {
                     buffer_path.clone().unwrap(),
                     true,
                 );
+                let lean_nightly_src = stream_pipe::ByteStreamPipe::new(
+                    GitHubRelease::new(
+                        String::from("leanprover/lean4-nightly"),
+                        source.retain_lean_nightly_versions,
+                    ),
+                    buffer_path.clone().unwrap(),
+                    true,
+                );
                 let lean_org_repo_src = merge_pipe! {
                     lean4: lean_src,
+                    lean4_nightly: lean_nightly_src,
                 };
                 let unified = merge_pipe! {
                     elan: elan_src,
                     leanprover: lean_org_repo_src,
+                    glean: glean_src,
                 };
                 let indexed = index_pipe::IndexPipe::new(
                     unified,
