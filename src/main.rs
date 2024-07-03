@@ -355,6 +355,14 @@ fn main() {
                     buffer_path.clone().unwrap(),
                     true,
                 );
+                let proofwidgets_src = stream_pipe::ByteStreamPipe::new(
+                    GitHubRelease::new(
+                        String::from("leanprover-community/ProofWidgets4"),
+                        source.retain_proofwidgets_versions,
+                    ),
+                    buffer_path.clone().unwrap(),
+                    true,
+                );
                 let lean_org_repo_src = merge_pipe! {
                     lean4: lean_src,
                     lean4_nightly: lean_nightly_src,
@@ -363,6 +371,7 @@ fn main() {
                     elan: elan_src,
                     leanprover: lean_org_repo_src,
                     glean: glean_src,
+                    proofwidgets: proofwidgets_src,
                 };
                 let indexed = index_pipe::IndexPipe::new(
                     unified,
