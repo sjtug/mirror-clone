@@ -10,4 +10,6 @@ pub struct ElanConfig {
     pub retain_lean_nightly_versions: usize,
     #[structopt(long, default_value = "1")]
     pub retain_glean_versions: usize,
+    #[structopt(long, default_value = "10")]
+    pub retain_proofwidgets_versions: usize,
 }
