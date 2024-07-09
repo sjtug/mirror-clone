@@ -34,7 +34,6 @@ impl SnapshotStorage<SnapshotMeta> for GhcupPackages {
         let latest_yaml_obj = filter_map_file_objs(
             list_files(&client, repo_config, &self.ghcup_repo_config.branch).await?,
         )
-        .filter(|obj| !obj.is_sig)
         .max_by(|x, y| x.version.cmp(&y.version))
         .ok_or_else(|| Error::ProcessError(String::from("no config file found")))?;
 
