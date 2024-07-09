@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use super::utils::Version;
 
-pub const EXPECTED_CONFIG_VERSION: Version = Version::new(0, 0, 7);
+pub const EXPECTED_CONFIG_VERSION: Version = Version::new(0, 0, 8);
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
