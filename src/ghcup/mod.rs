@@ -20,11 +20,13 @@
 use structopt::StructOpt;
 
 use crate::ghcup::packages::GhcupPackages;
+use crate::ghcup::script::GhcupScript;
 use crate::ghcup::yaml::GhcupYaml;
 use crate::utils::CommaSplitVecString;
 
 mod packages;
 mod parser;
+mod script;
 mod utils;
 mod yaml;
 
@@ -62,6 +64,11 @@ pub struct GhcupRepoConfig {
 }
 
 impl Ghcup {
+    pub fn get_script(&self) -> GhcupScript {
+        GhcupScript {
+            script_url: self.script_url.clone(),
+        }
+    }
     pub fn get_yaml(&self, legacy: bool) -> GhcupYaml {
         GhcupYaml::new(self.ghcup_repo_config.clone(), legacy)
     }

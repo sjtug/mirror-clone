@@ -111,6 +111,10 @@ macro_rules! transfer {
     };
 }
 
+lazy_static! {
+    static ref HASKELL_PATTERN: regex::Regex =
+        regex::Regex::new("https://downloads.haskell.org").unwrap();
+}
 const HLS_URL: &str = "https://github.com/haskell/haskell-language-server";
 const STACK_URL: &str = "https://github.com/commercialhaskell/stack";
 const HASKELL_URL: &str = "https://downloads.haskell.org";
@@ -220,6 +224,24 @@ fn main() {
             Source::Ghcup(source) => {
                 let target_mirror = source.target_mirror.clone();
 
+                let script_src = rewrite_pipe::RewritePipe::new(
+                    stream_pipe::ByteStreamPipe::new(
+                        source.get_script(),
+                        buffer_path.clone().expect("buffer path is not present"),
+                        false,
+                    ),
+                    buffer_path.clone().unwrap(),
+                    utils::fn_regex_rewrite(
+                        &HASKELL_PATTERN,
+                        Path::new(&target_mirror)
+                            .join("packages")
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
+                    ),
+                    999999,
+                );
+
                 let yaml_rewrite_fn = move |src: String| -> Result<String> {
                     Ok(src
                         .replace(
@@ -280,6 +302,7 @@ fn main() {
                     stack: stack_src,
                     yaml: yaml_legacy_src,
                     yaml_v2: yaml_src,
+                    script: script_src,
                 };
 
                 let indexed = index_pipe::IndexPipe::new(

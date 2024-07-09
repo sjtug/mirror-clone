@@ -13,7 +13,7 @@ use super::GhcupRepoConfig;
 
 lazy_static! {
     static ref YAML_CONFIG_PATTERN: regex::Regex =
-        regex::Regex::new(r"ghcup-(?P<ver>\d.\d.\d).yaml(?P<sig>.sig)?$").unwrap();
+        regex::Regex::new(r"ghcup-(?P<ver>\d.\d.\d).yaml$").unwrap();
 }
 
 // order is reverted to derive Ord ;)
@@ -81,7 +81,6 @@ enum NodeType {
 pub struct ObjectInfo {
     pub name: String,
     pub path: String,
-    pub is_sig: bool,
     pub version: Version,
 }
 
@@ -89,7 +88,6 @@ pub struct ObjectInfo {
 pub struct ObjectInfoWithUrl {
     pub name: String,
     pub path: String,
-    pub is_sig: bool,
     pub version: Version,
     pub url: String,
 }
@@ -126,7 +124,6 @@ pub fn filter_map_file_objs(
                 let name = f.path.split('/').last().unwrap().to_string();
                 Some(ObjectInfo {
                     name,
-                    is_sig: c.name("sig").is_some(),
                     path: f.path.clone(),
                     version: Version::from_str(m.as_str()).ok()?,
                 })
@@ -153,7 +150,6 @@ pub async fn get_raw_blob_url(
         name: object.name,
         path: object.path,
         version: object.version,
-        is_sig: object.is_sig,
         url: content.download_url,
     })
 }
