@@ -42,7 +42,7 @@ impl SnapshotStorage<String> for Homebrew {
         let json: Value = serde_json::from_str(&data).unwrap();
         let packages = json.as_array().unwrap();
         let snapshot: Vec<String> = packages
-            .into_iter()
+            .iter()
             .filter_map(|package| package.as_object())
             .filter_map(|package| {
                 progress.set_message(

@@ -25,7 +25,7 @@ impl SnapshotStorage<String> for Pypi {
 
         info!(logger, "downloading pypi index...");
         let mut index = client
-            .get(&format!("{}/", self.simple_base))
+            .get(format!("{}/", self.simple_base))
             .send()
             .await?
             .text()
@@ -55,7 +55,7 @@ impl SnapshotStorage<String> for Pypi {
                 let func = async move {
                     progress.set_message(&name);
                     let package = client
-                        .get(&format!("{}/{}", simple_base, url))
+                        .get(format!("{}/{}", simple_base, url))
                         .send()
                         .await?
                         .text()

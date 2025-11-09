@@ -52,7 +52,7 @@ impl SnapshotStorage<String> for Rustup {
                     let target = format!("dist/{}/channel-rust-{}.toml", day_string, channel);
                     progress.set_message(&target);
                     let data = client
-                        .get(&format!("{}/{}", base, target))
+                        .get(format!("{}/{}", base, target))
                         .send()
                         .await?
                         .text()

@@ -29,6 +29,15 @@ impl SnapshotStorage<String> for Dart {
 
         loop {
             let data = client.get(&next_url).send().await?.text().await?;
+            let mut retry_count = 0;
+            while serde_json::from_str::<Value>(&data).is_err() {
+                println!("Retry conncetion #{}...", retry_count);
+                retry_count += 1;
+                continue;
+            }
+            // println!("{}", data);
+            // FIXME: retry connection when serde_json return err,
+            // which implies receiving a useless HTML element from request
             let data: Value = serde_json::from_str(&data).unwrap();
             let data = data.as_object().unwrap();
 
@@ -72,7 +81,7 @@ impl SnapshotStorage<String> for Dart {
                 let func = async move {
                     progress.set_message(&name);
                     let package = client
-                        .get(&format!("{}/api/packages/{}", base, name))
+                        .get(format!("{}/api/packages/{}", base, name))
                         .send()
                         .await?
                         .text()
@@ -81,7 +90,7 @@ impl SnapshotStorage<String> for Dart {
                     let data: Value = serde_json::from_str(&package).unwrap();
                     let versions = data.get("versions").unwrap().as_array().unwrap();
                     let archives: Vec<String> = versions
-                        .into_iter()
+                        .iter()
                         .filter_map(|version| version.get("archive_url"))
                         .filter_map(|archive_url| archive_url.as_str())
                         .map(|archive_url| archive_url.replace(&base, ""))
