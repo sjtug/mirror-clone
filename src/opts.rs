@@ -135,7 +135,7 @@ pub struct TransferConfig {
 }
 
 #[derive(StructOpt, Debug)]
-#[structopt(version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"), ")"), author = "Alex Chi <iskyzh@gmail.com>")]
+#[structopt(version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("VERGEN_GIT_SHA"), ")"), author = "Alex Chi <iskyzh@gmail.com>")]
 pub struct Opts {
     #[structopt(subcommand)]
     pub source: Source,

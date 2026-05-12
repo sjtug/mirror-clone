@@ -51,3 +51,6 @@ zip = "0.5"
 [dev-dependencies]
 insta = "1.30"
 rstest = "0.17"
+
+[build-dependencies]
+vergen-gitcl = { version = "1", features = ["build"] }
