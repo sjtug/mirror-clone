@@ -87,21 +87,10 @@ where
 
     pub async fn transfer(mut self) -> Result<()> {
         let logger = create_logger();
-        let mut client_builder = ClientBuilder::new()
+        let client = ClientBuilder::new()
             .user_agent(crate::utils::user_agent())
-            .connect_timeout(Duration::from_secs(10));
-
-        if let Ok(token) = std::env::var("GITHUB_TOKEN") {
-            let mut headers = reqwest::header::HeaderMap::new();
-            headers.insert(
-                reqwest::header::AUTHORIZATION,
-                reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token))
-                    .map_err(|e| Error::ProcessError(format!("invalid GITHUB_TOKEN: {}", e)))?,
-            );
-            client_builder = client_builder.default_headers(headers);
-        }
-
-        let client = client_builder.build()?;
+            .connect_timeout(Duration::from_secs(10))
+            .build()?;
         info!(logger, "using simple diff transfer"; "config" => format!("{:?}", self.config));
         info!(logger, "begin transfer"; "source" => self.source.info(), "target" => self.target.info());
 

@@ -63,19 +63,20 @@ impl SnapshotStorage<SnapshotMeta> for GitHubRelease {
         let client = mission.client;
 
         info!(logger, "fetching GitHub json...");
-        let data = client
-            .get(format!(
+        let data = crate::utils::add_github_auth(
+            client.get(format!(
                 "https://api.github.com/repos/{}/releases",
                 self.repo
             ))
-            .send()
-            .timeout(Duration::from_secs(60))
-            .await
-            .into_result()?
-            .text()
-            .timeout(Duration::from_secs(60))
-            .await
-            .into_result()?;
+        )
+        .send()
+        .timeout(Duration::from_secs(60))
+        .await
+        .into_result()?
+        .text()
+        .timeout(Duration::from_secs(60))
+        .await
+        .into_result()?;
 
         info!(logger, "parsing...");
         let releases = serde_json::from_str::<Vec<GitHubReleaseItem>>(&data)?;

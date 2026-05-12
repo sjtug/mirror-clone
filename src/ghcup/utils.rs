@@ -109,7 +109,11 @@ pub async fn list_files(
         config.repo, commit
     );
 
-    let tree_meta: TreeMeta = client.get(tree_url).send().await?.json().await?;
+    let tree_meta: TreeMeta = crate::utils::add_github_auth(client.get(tree_url))
+        .send()
+        .await?
+        .json()
+        .await?;
     Ok(tree_meta
         .tree
         .into_iter()
@@ -140,15 +144,16 @@ pub async fn get_raw_blob_url(
     config: &GhcupRepoConfig,
     object: ObjectInfo,
 ) -> Result<ObjectInfoWithUrl> {
-    let content: ContentMeta = client
-        .get(format!(
+    let content: ContentMeta = crate::utils::add_github_auth(
+        client.get(format!(
             "https://api.github.com/repos/{}/contents/{}",
             config.repo, object.path
         ))
-        .send()
-        .await?
-        .json()
-        .await?;
+    )
+    .send()
+    .await?
+    .json()
+    .await?;
     Ok(ObjectInfoWithUrl {
         name: object.name,
         path: object.path,
