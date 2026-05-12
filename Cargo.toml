@@ -53,4 +53,4 @@ insta = "1.30"
 rstest = "0.17"
 
 [build-dependencies]
-vergen-gitcl = { version = "1", features = ["build"] }
+vergen = { version = "8", features = ["build", "git", "gitcl"] }
