@@ -144,12 +144,10 @@ pub async fn get_raw_blob_url(
     config: &GhcupRepoConfig,
     object: ObjectInfo,
 ) -> Result<ObjectInfoWithUrl> {
-    let content: ContentMeta = crate::utils::add_github_auth(
-        client.get(format!(
-            "https://api.github.com/repos/{}/contents/{}",
-            config.repo, object.path
-        ))
-    )
+    let content: ContentMeta = crate::utils::add_github_auth(client.get(format!(
+        "https://api.github.com/repos/{}/contents/{}",
+        config.repo, object.path
+    )))
     .send()
     .await?
     .json()

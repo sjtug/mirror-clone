@@ -63,12 +63,10 @@ impl SnapshotStorage<SnapshotMeta> for GitHubRelease {
         let client = mission.client;
 
         info!(logger, "fetching GitHub json...");
-        let data = crate::utils::add_github_auth(
-            client.get(format!(
-                "https://api.github.com/repos/{}/releases",
-                self.repo
-            ))
-        )
+        let data = crate::utils::add_github_auth(client.get(format!(
+            "https://api.github.com/repos/{}/releases",
+            self.repo
+        )))
         .send()
         .timeout(Duration::from_secs(60))
         .await
