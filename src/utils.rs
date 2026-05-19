@@ -3,11 +3,24 @@ use std::str::FromStr;
 
 use indicatif::ProgressStyle;
 use regex::Regex;
+use reqwest::RequestBuilder;
 use slog::{Drain, o};
 
 use crate::common::SnapshotPath;
 use crate::error::Result;
 use crate::metadata::SnapshotMeta;
+
+/// Add GitHub Bearer token to a request if GITHUB_TOKEN is set and non-empty.
+/// This scopes the token to GitHub API calls only, avoiding token leakage to other endpoints.
+pub fn add_github_auth(req: RequestBuilder) -> RequestBuilder {
+    if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+        let token = token.trim().to_string();
+        if !token.is_empty() {
+            return req.bearer_auth(token);
+        }
+    }
+    req
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct CommaSplitVecString(Vec<String>);
