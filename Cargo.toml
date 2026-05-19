@@ -7,7 +7,7 @@ version = "0.2.0"
 
 [dependencies]
 async-trait = "0.1"
-bytes = "1.0"
+bytes = "1.11"
 chrono = "0.4"
 console = "0.14"
 filetime = "0.2"
