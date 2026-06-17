@@ -24,11 +24,8 @@ use crate::stream_pipe::ByteStream;
 use crate::traits::{Key, SnapshotStorage, TargetStorage};
 
 use async_trait::async_trait;
+use aws_sdk_s3::{Client as S3Client, config::Region, primitives::ByteStream as S3ByteStream};
 use futures_util::{StreamExt, stream};
-use rusoto_core::Region;
-use rusoto_s3::{
-    DeleteObjectRequest, HeadObjectRequest, ListObjectsV2Request, PutObjectRequest, S3, S3Client,
-};
 use slog::{debug, info, warn};
 
 #[derive(Debug)]
@@ -59,17 +56,15 @@ pub struct S3Backend {
     client: S3Client,
 }
 
-fn jcloud_region(name: String, endpoint: String) -> Region {
-    Region::Custom { name, endpoint }
-}
-
-fn get_s3_client(name: String, endpoint: String) -> S3Client {
-    S3Client::new(jcloud_region(name, endpoint))
-}
-
 impl S3Backend {
-    pub fn new(config: S3Config) -> Self {
-        let client = get_s3_client("jCloud S3".to_string(), config.endpoint.clone());
+    pub async fn new(config: S3Config) -> Self {
+        let sdk_config = aws_config::from_env().load().await;
+        let s3_config = aws_sdk_s3::config::Builder::from(&sdk_config)
+            .region(Region::new("jCloud S3"))
+            .endpoint_url(config.endpoint.clone())
+            .force_path_style(true)
+            .build();
+        let client = S3Client::from_conf(s3_config);
         Self { config, client }
     }
 
@@ -78,6 +73,10 @@ impl S3Backend {
         map.insert("clone-backend".to_string(), "s3-v1".to_string());
         map
     }
+}
+
+fn s3_error(action: &str, error: impl std::fmt::Debug) -> Error {
+    Error::StorageError(format!("S3 {} error: {:?}", action, error))
 }
 
 #[async_trait]
@@ -94,6 +93,8 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
 
         let s3_prefix_base = format!("{}/", self.config.prefix);
         let total_size = std::sync::Arc::new(AtomicU64::new(0));
+        let max_keys = i32::try_from(self.config.max_keys)
+            .map_err(|_| Error::ConfigureError("s3 max keys does not fit i32".to_string()))?;
 
         let prefix = match self.config.prefix_hint_mode.as_deref() {
             Some("pypi") => {
@@ -119,34 +120,40 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
                 let progress = progress.clone();
                 let logger = logger.clone();
                 let s3_prefix_base = s3_prefix_base.clone();
-                let max_keys = self.config.max_keys;
 
                 async move {
                     let mut snapshot = vec![];
                     let mut continuation_token = None;
 
                     loop {
-                        let req = ListObjectsV2Request {
-                            bucket: bucket.clone(),
-                            prefix: prefix.clone(),
-                            max_keys: Some(max_keys as i64),
-                            continuation_token,
-                            ..Default::default()
-                        };
+                        let mut req = client
+                            .list_objects_v2()
+                            .bucket(bucket.clone())
+                            .max_keys(max_keys as i32);
+                        if let Some(prefix) = &prefix {
+                            req = req.prefix(prefix);
+                        }
+                        if let Some(continuation_token) = continuation_token.take() {
+                            req = req.continuation_token(continuation_token);
+                        }
 
-                        let resp = client.list_objects_v2(req).await?;
+                        let resp = req
+                            .send()
+                            .await
+                            .map_err(|err| s3_error("list objects", err))?;
 
                         let mut first_key = true;
 
-                        if let Some(contents) = resp.contents {
-                            for item in contents {
-                                if let Some(size) = item.size {
+                        for item in resp.contents() {
+                            if let Some(size) = item.size() {
+                                if size >= 0 {
                                     total_size.fetch_add(
                                         size as u64,
                                         std::sync::atomic::Ordering::SeqCst,
                                     );
                                 }
-                                let key = item.key.unwrap();
+                            }
+                            if let Some(key) = item.key() {
                                 if key.starts_with(&s3_prefix_base) {
                                     let key = key[s3_prefix_base.len()..].to_string();
                                     // let key = crate::utils::rewrite_url_string(&gen_map, &key);
@@ -156,7 +163,7 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
                                     }
                                     snapshot.push(SnapshotMeta {
                                         key,
-                                        size: item.size.map(|x| x as u64),
+                                        size: item.size().and_then(|x| u64::try_from(x).ok()),
                                         ..Default::default()
                                     });
                                 } else {
@@ -165,8 +172,8 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
                             }
                         }
 
-                        if let Some(next_continuation_token) = resp.next_continuation_token {
-                            continuation_token = Some(next_continuation_token);
+                        if let Some(next_continuation_token) = resp.next_continuation_token() {
+                            continuation_token = Some(next_continuation_token.to_string());
                         } else {
                             break;
                         }
@@ -193,19 +200,17 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
 
                     async move {
                         progress.set_message(&snapshot.key);
-                        let req = HeadObjectRequest {
-                            bucket,
-                            key: format!("{}/{}", prefix, snapshot.key),
-                            ..Default::default()
-                        };
-                        let resp = client.head_object(req).await?;
-                        let last_modified = if let Some(metadata) = resp.metadata {
-                            metadata
-                                .get("clone-last-modified")
-                                .and_then(|x| x.parse::<u64>().ok())
-                        } else {
-                            None
-                        };
+                        let resp = client
+                            .head_object()
+                            .bucket(bucket)
+                            .key(format!("{}/{}", prefix, snapshot.key))
+                            .send()
+                            .await
+                            .map_err(|err| s3_error("head object", err))?;
+                        let last_modified = resp
+                            .metadata()
+                            .and_then(|metadata| metadata.get("clone-last-modified"))
+                            .and_then(|x| x.parse::<u64>().ok());
                         Ok::<_, Error>(SnapshotMeta {
                             last_modified,
                             ..snapshot
@@ -314,40 +319,52 @@ where
         debug!(logger, "upload: {}", snapshot.key());
 
         let ByteStream {
-            mut object,
+            object,
             length,
             modified_at,
             content_type,
         } = byte_stream;
 
-        let body = object.as_stream();
+        let body = S3ByteStream::read_from()
+            .path(
+                object
+                    .path()
+                    .ok_or_else(|| Error::PipeError("missing local object path".to_string()))?,
+            )
+            .build()
+            .await
+            .map_err(|err| s3_error("open upload body", err))?;
 
         let mut metadata = self.gen_metadata();
         metadata.insert("clone-last-modified".to_string(), modified_at.to_string());
         metadata.extend(snapshot.s3_meta());
 
-        let req = PutObjectRequest {
-            bucket: self.config.bucket.clone(),
-            key: format!("{}/{}", self.config.prefix, snapshot.key()),
-            body: Some(rusoto_s3::StreamingBody::new(body)),
-            metadata: Some(metadata),
-            content_length: Some(length as i64),
-            content_type: content_type.or_else(|| get_mime(snapshot.key())),
-            ..Default::default()
-        };
+        let req = self
+            .client
+            .put_object()
+            .bucket(self.config.bucket.clone())
+            .key(format!("{}/{}", self.config.prefix, snapshot.key()))
+            .body(body)
+            .set_metadata(Some(metadata))
+            .content_length(length as i64)
+            .set_content_type(content_type.or_else(|| get_mime(snapshot.key())));
 
-        self.client.put_object(req).await?;
+        req.send()
+            .await
+            .map_err(|err| s3_error("put object", err))?;
+        drop(object);
 
         Ok(())
     }
 
     async fn delete_object(&self, snapshot: &Snapshot, _mission: &Mission) -> Result<()> {
-        let req = DeleteObjectRequest {
-            bucket: self.config.bucket.clone(),
-            key: format!("{}/{}", self.config.prefix, snapshot.key()),
-            ..Default::default()
-        };
-        self.client.delete_object(req).await?;
+        self.client
+            .delete_object()
+            .bucket(self.config.bucket.clone())
+            .key(format!("{}/{}", self.config.prefix, snapshot.key()))
+            .send()
+            .await
+            .map_err(|err| s3_error("delete object", err))?;
         Ok(())
     }
 }

@@ -18,8 +18,8 @@ pub enum Error {
     TimeoutError(()),
     #[error("Storage Error {0}")]
     StorageError(String),
-    #[error("Rusoto Error {0}")]
-    RusotoError(String),
+    #[error("S3 Error {0}")]
+    S3Error(String),
     #[error("GCP Error {0}")]
     GCPError(String),
     #[error("Configure Error {0}")]
@@ -42,9 +42,9 @@ pub enum Error {
     },
 }
 
-impl<T: std::fmt::Debug> From<rusoto_core::RusotoError<T>> for Error {
-    fn from(error: rusoto_core::RusotoError<T>) -> Self {
-        Error::RusotoError(format!("Rusoto Error: {:?}", error))
+impl From<aws_sdk_s3::primitives::ByteStreamError> for Error {
+    fn from(error: aws_sdk_s3::primitives::ByteStreamError) -> Self {
+        Error::S3Error(format!("S3 ByteStream Error: {:?}", error))
     }
 }
 

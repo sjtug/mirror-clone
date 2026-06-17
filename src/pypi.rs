@@ -13,14 +13,13 @@ use std::env;
 use async_trait::async_trait;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use google_bigquery2::api::QueryRequest;
-use google_bigquery2::hyper::client::HttpConnector;
-use google_bigquery2::hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use google_bigquery2::oauth2::authenticator::ApplicationDefaultCredentialsTypes;
-use google_bigquery2::oauth2::{
+use google_bigquery2::hyper_rustls::{self, HttpsConnectorBuilder};
+use google_bigquery2::hyper_util::{self, client::legacy::connect::HttpConnector};
+use google_bigquery2::yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
+use google_bigquery2::yup_oauth2::{
     ApplicationDefaultCredentialsAuthenticator, ApplicationDefaultCredentialsFlowOpts,
 };
-use google_bigquery2::{Bigquery, hyper};
-use hyper_proxy::{Intercept, Proxy, ProxyConnector};
+use google_bigquery2::{Bigquery, common, yup_oauth2};
 use regex::Regex;
 use reqwest::Client;
 use serde_json::Value;
@@ -106,45 +105,37 @@ async fn pypi_index(
         .collect())
 }
 
-macro_rules! append_proxy_from_env {
-    ($proxies:expr, $env_name:expr, $intercept:expr) => {
-        if let Ok(proxy) = env::var($env_name) {
-            $proxies.push(Proxy::new($intercept, proxy.parse().expect($env_name)));
-        }
-    };
-}
+type BigqueryConnector = hyper_rustls::HttpsConnector<HttpConnector>;
+type BigqueryClient = common::Client<BigqueryConnector>;
 
-fn collect_proxies() -> Vec<Proxy> {
-    let mut proxies = vec![];
-
-    // TODO: priority?
-    append_proxy_from_env!(proxies, "http_proxy", Intercept::Http);
-    append_proxy_from_env!(proxies, "HTTP_PROXY", Intercept::Http);
-    append_proxy_from_env!(proxies, "https_proxy", Intercept::Https);
-    append_proxy_from_env!(proxies, "HTTPS_PROXY", Intercept::Https);
-    append_proxy_from_env!(proxies, "all_proxy", Intercept::All);
-    append_proxy_from_env!(proxies, "ALL_PROXY", Intercept::All);
-
-    proxies
-}
-
-fn hyper_client() -> Result<hyper::Client<ProxyConnector<HttpsConnector<HttpConnector>>>> {
-    let raw_connector = HttpsConnectorBuilder::new()
-        .with_native_roots()
+fn https_connector() -> Result<BigqueryConnector> {
+    Ok(HttpsConnectorBuilder::new()
+        .with_native_roots()?
         .https_or_http()
         .enable_http1()
         .enable_http2()
-        .build();
-    let mut connector = ProxyConnector::new(raw_connector)?;
-    connector.extend_proxies(collect_proxies());
-    Ok(hyper::Client::builder().build(connector))
+        .build())
 }
 
-async fn bigquery_hub() -> Result<Bigquery<ProxyConnector<HttpsConnector<HttpConnector>>>> {
-    let hyper = hyper_client()?;
+fn bigquery_client() -> Result<BigqueryClient> {
+    Ok(
+        hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+            .build::<_, common::Body>(https_connector()?),
+    )
+}
+
+fn oauth_client_builder() -> Result<yup_oauth2::client::CustomHyperClientBuilder<BigqueryConnector>>
+{
+    let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+        .build::<_, String>(https_connector()?);
+    Ok(yup_oauth2::client::CustomHyperClientBuilder::from(client))
+}
+
+async fn bigquery_hub() -> Result<Bigquery<BigqueryConnector>> {
+    let client = bigquery_client()?;
     let auth = match ApplicationDefaultCredentialsAuthenticator::with_client(
         ApplicationDefaultCredentialsFlowOpts::default(),
-        hyper.clone(),
+        oauth_client_builder()?,
     )
     .await
     {
@@ -155,7 +146,7 @@ async fn bigquery_hub() -> Result<Bigquery<ProxyConnector<HttpsConnector<HttpCon
             authenticator.build().await?
         }
     };
-    Ok(Bigquery::new(hyper, auth))
+    Ok(Bigquery::new(client, auth))
 }
 
 async fn bigquery_index(logger: &Logger) -> Result<Vec<String>> {

@@ -6,6 +6,9 @@ use std::path::Path;
 use lazy_static::lazy_static;
 use structopt::StructOpt;
 
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
 use common::SnapshotConfig;
 use error::Result;
 use file_backend::FileBackend;
@@ -15,6 +18,10 @@ use simple_diff_transfer::SimpleDiffTransfer;
 
 use crate::github_release::GitHubRelease;
 use crate::homebrew::Homebrew;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL_ALLOCATOR: Jemalloc = Jemalloc;
 
 mod checksum_pipe;
 mod common;
@@ -94,7 +101,7 @@ macro_rules! transfer {
     ($opts: expr, $source: expr, $transfer_config: expr, $pipes: expr) => {
         match $opts.target_type {
             Target::S3 => {
-                let target: S3Backend = $opts.s3_config.clone().into();
+                let target = S3Backend::new($opts.s3_config.clone().into()).await;
                 let pipes = $pipes;
                 let source = pipes($source);
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);

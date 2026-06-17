@@ -12,7 +12,7 @@ use crate::rsync::Rsync as RsyncConfig;
 use crate::rustup::Rustup as RustupConfig;
 use crate::{
     error::{Error, Result},
-    s3::S3Backend,
+    s3::S3Config,
 };
 use structopt::StructOpt;
 
@@ -48,7 +48,7 @@ pub enum Target {
     File,
 }
 
-impl From<S3CliConfig> for S3Backend {
+impl From<S3CliConfig> for S3Config {
     fn from(config: S3CliConfig) -> Self {
         let mut s3_config =
             crate::s3::S3Config::new_jcloud(config.s3_prefix.unwrap(), config.s3_scan_metadata);
@@ -60,7 +60,7 @@ impl From<S3CliConfig> for S3Backend {
         }
         s3_config.max_keys = config.s3_max_keys;
         s3_config.prefix_hint_mode = config.s3_prefix_hint_mode;
-        S3Backend::new(s3_config)
+        s3_config
     }
 }
 
