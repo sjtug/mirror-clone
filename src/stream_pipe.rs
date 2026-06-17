@@ -15,12 +15,10 @@ use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
 use crate::traits::{Key, Metadata, SnapshotStorage, SourceStorage};
 use crate::utils::{hash_string, unix_time};
-use futures_core::Stream;
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::StreamExt;
 use slog::{debug, warn};
 use tokio::fs::OpenOptions;
-use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter};
-use tokio_util::codec;
+use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 
 pub enum ByteObject {
     LocalFile {
@@ -30,23 +28,18 @@ pub enum ByteObject {
 }
 
 impl ByteObject {
-    // Rust 2024 needs explicit `+ use<>` to capture more lifetimes than intended
-    pub fn as_stream(&mut self) -> impl Stream<Item = std::io::Result<bytes::Bytes>> + use<> {
-        match self {
-            ByteObject::LocalFile { file, .. } => codec::FramedRead::new(
-                BufReader::new(file.take().unwrap()),
-                codec::BytesCodec::new(),
-            )
-            .map_ok(|bytes| bytes.freeze()),
-        }
-    }
-
     pub fn use_file(mut self) -> std::path::PathBuf {
         match &mut self {
             ByteObject::LocalFile { file, path } => {
                 drop(file.take().unwrap());
                 path.take().unwrap()
             }
+        }
+    }
+
+    pub fn path(&self) -> Option<&std::path::Path> {
+        match self {
+            ByteObject::LocalFile { path, .. } => path.as_deref(),
         }
     }
 }

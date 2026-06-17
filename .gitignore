@@ -3,4 +3,6 @@
 /.idea
 .env
 
+.pre-commit-config.flake.yaml
+
 sjtug-*.json
