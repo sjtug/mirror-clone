@@ -39,6 +39,7 @@ impl SnapshotMeta {
     }
 }
 
+#[allow(dead_code)]
 pub struct MetaAsPath<Source: SnapshotStorage<SnapshotMeta> + std::fmt::Debug + std::marker::Send> {
     source: Source,
 }

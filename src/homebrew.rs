@@ -3,7 +3,7 @@
 //! Homebrew source will use brew.sh API to fetch all available bottles.
 //! It will generate a list of URLs.
 //!
-//! Reference: https://github.com/ustclug/ustcmirror-images/blob/master/homebrew-bottles/bottles-json/src/main.rs
+//! Reference: <https://github.com/ustclug/ustcmirror-images/blob/master/homebrew-bottles/bottles-json/src/main.rs>
 //! MIT License, Copyright (c) 2017 Jian Zeng
 
 use crate::common::{Mission, SnapshotConfig, TransferURL};

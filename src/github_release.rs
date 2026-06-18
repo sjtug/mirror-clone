@@ -18,11 +18,16 @@ use structopt::StructOpt;
 
 #[derive(Deserialize, Debug)]
 pub struct GitHubReleaseAsset {
+    #[expect(dead_code)]
     url: String,
+    #[expect(dead_code)]
     id: u64,
+    #[expect(dead_code)]
     name: String,
+    #[expect(dead_code)]
     content_type: String,
     size: u64,
+    #[expect(dead_code)]
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     browser_download_url: String,

@@ -24,6 +24,7 @@ where
     F: Fn(RewriteItem) -> Result<RewriteItem> + Send + Sync,
 {
     pub source: Source,
+    #[expect(dead_code)]
     pub buffer_path: String,
     pub rewrite_fn: F,
     pub max_length: u64,

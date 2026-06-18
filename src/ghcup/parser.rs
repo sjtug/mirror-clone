@@ -10,6 +10,7 @@ pub const EXPECTED_CONFIG_VERSION: Version = Version::new(0, 0, 8);
 #[serde(rename_all = "camelCase")]
 pub struct DownloadSource {
     pub dl_uri: String,
+    #[expect(dead_code)]
     pub dl_hash: String,
 }
 

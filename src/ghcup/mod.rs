@@ -48,6 +48,7 @@ pub struct Ghcup {
         long,
         default_value = "ghcup-0.0.4.yaml,ghcup-0.0.5.yaml,ghcup-0.0.6.yaml"
     )]
+    #[expect(dead_code)]
     pub additional_yaml: CommaSplitVecString,
 }
 

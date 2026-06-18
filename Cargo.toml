@@ -39,7 +39,7 @@ aws-sdk-s3 = { version = "1.122.0", default-features = false, features = [
 ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_yaml = "0.8"
+serde_yaml = { package = "yaml_serde", version = "0.10" }
 sha2 = "0.9"
 slog = "2.5"
 slog-async = "2.5"
@@ -60,7 +60,7 @@ insta = "1.30"
 rstest = "0.17"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.6"
+tikv-jemallocator = "0.7"
 
 [build-dependencies]
 vergen-gitcl = "9"
