@@ -7,11 +7,13 @@ use crate::common::{Mission, SnapshotConfig};
 use crate::error::Result;
 use crate::traits::{Key, SnapshotStorage, SourceStorage};
 
+#[allow(dead_code)]
 pub struct FilterPipe<Source> {
     pub source: Source,
     pub exclude_patterns: RegexSet,
 }
 
+#[expect(dead_code)]
 impl<Source> FilterPipe<Source> {
     pub fn new(source: Source, exclude_patterns: RegexSet) -> Self {
         FilterPipe {

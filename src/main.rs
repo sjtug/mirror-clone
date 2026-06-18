@@ -35,7 +35,6 @@ mod ghcup;
 mod github_release;
 mod gradle;
 mod homebrew;
-mod html_scanner;
 mod index_pipe;
 #[macro_use]
 mod merge_pipe;

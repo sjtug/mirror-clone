@@ -67,6 +67,7 @@ pub struct FileMeta {
     path: String,
     #[serde(rename = "type")]
     ty: NodeType,
+    #[expect(dead_code)]
     url: String,
 }
 
@@ -88,8 +89,11 @@ pub struct ObjectInfo {
 #[derive(Debug, Clone)]
 pub struct ObjectInfoWithUrl {
     pub name: String,
+    #[expect(dead_code)]
     pub path: String,
+    #[expect(dead_code)]
     pub is_sig: bool,
+    #[expect(dead_code)]
     pub version: Version,
     pub url: String,
 }

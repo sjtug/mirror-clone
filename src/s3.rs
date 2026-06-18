@@ -129,7 +129,7 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
                         let mut req = client
                             .list_objects_v2()
                             .bucket(bucket.clone())
-                            .max_keys(max_keys as i32);
+                            .max_keys(max_keys);
                         if let Some(prefix) = &prefix {
                             req = req.prefix(prefix);
                         }
@@ -145,13 +145,11 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
                         let mut first_key = true;
 
                         for item in resp.contents() {
-                            if let Some(size) = item.size() {
-                                if size >= 0 {
-                                    total_size.fetch_add(
-                                        size as u64,
-                                        std::sync::atomic::Ordering::SeqCst,
-                                    );
-                                }
+                            if let Some(size) = item.size()
+                                && size >= 0
+                            {
+                                total_size
+                                    .fetch_add(size as u64, std::sync::atomic::Ordering::SeqCst);
                             }
                             if let Some(key) = item.key() {
                                 if key.starts_with(&s3_prefix_base) {

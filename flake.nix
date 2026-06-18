@@ -27,7 +27,12 @@
   };
 
   outputs =
-    inputs@{ flake-parts, advisory-db, ... }:
+    inputs@{
+      self,
+      flake-parts,
+      advisory-db,
+      ...
+    }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         inputs.treefmt-nix.flakeModule
@@ -66,6 +71,7 @@
               fileset = lib.fileset.unions [
                 (craneLib.fileset.commonCargoSources root)
                 (lib.fileset.maybeMissing (root + "/tests"))
+                (lib.fileset.maybeMissing (root + "/src/snapshots"))
               ];
             };
 
@@ -76,6 +82,7 @@
             strictDeps = true;
             nativeBuildInputs = [ cacert ];
             buildInputs = [ rust-jemalloc-sys ];
+            VERGEN_GIT_SHA = self.rev or "dirty";
           };
           # Build *just* the cargo dependencies, so we can reuse
           # all of that work (e.g. via cachix) when running in CI
@@ -109,7 +116,6 @@
                 cacert
                 stdenv.cc
                 pkgsStatic.stdenv.cc
-                pkgs.git
               ];
               buildInputs = [ pkgsStatic.rust-jemalloc-sys ];
               doCheck = true; # always run checkPhase for release artifact
@@ -235,6 +241,7 @@
               [
                 # pkg-config
                 # rustPlatform.bindgenHook
+                cargo-insta
 
                 ### Miscellaneous ###
                 # cargo-audit
@@ -251,6 +258,8 @@
                 cargo-llvm-cov
                 # valgrind
               ];
+
+            VERGEN_GIT_SHA = self.rev or "dirty";
           };
 
           packages.default = my-crate;
