@@ -2,15 +2,12 @@ on:
   push:
     branches:
     - master
-  pull_request:
-    branches:
-    - master
 
-name: Test
+name: Build
 
 jobs:
-  test:
-    name: Lint and Test
+  build:
+    name: Build
     runs-on: ubuntu-latest
     permissions:
       actions: write # caching
@@ -37,5 +34,9 @@ jobs:
           purge-created: 0
           purge-last-accessed: P1DT12H # 1 day and 12 hours
           purge-primary-key: never
-      - name: Run all checks
-        run: nix flake check -Lv --keep-going --option log-lines 0
+      - name: Build mirror-clone
+        run: nix build -Lv
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: mirror-clone-release
+          path: result/bin/mirror-clone

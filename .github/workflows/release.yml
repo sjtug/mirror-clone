@@ -1,9 +1,9 @@
 on:
   push:
     branches:
-    - release
+      - release
     tags:
-    - "v*"
+      - "v*"
 
 name: Release
 
@@ -11,32 +11,23 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # trusted publishing + attestations
+      actions: write # caching
+      contents: write # see https://github.com/softprops/action-gh-release#permissions
     steps:
-      - uses: actions/checkout@v5
-        name: Checkout 🛎️
+      - name: Checkout repository
+        uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install musl toolchain
-        run: sudo apt-get install -y libssl-dev
-      - uses: dtolnay/rust-toolchain@stable
-        name: Setup Cargo Toolchain 🛎️
-      - uses: Swatinem/rust-cache@v2
-      - name: Compile all targets 🚀
-        run: cargo build --release --target x86_64-unknown-linux-gnu
-      - name: create tar
-        run: tar -cvzf mirror-clone.tar.gz -C target/x86_64-unknown-linux-gnu/release mirror-clone
-      - uses: softprops/action-gh-release@v2
-        id: create_release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Nix
+        uses: cachix/install-nix-action@51f3067b56fe8ae331890c77d4e454f6d60615ff # v31.10.2
+      - name: Build static-linked binary with musl
+        run: nix build .#musl -Lv
+      - name: Create tar
+        run: tar -cvzf mirror-clone.tar.gz -C result/bin mirror-clone
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
@@ -44,3 +35,5 @@ jobs:
           draft: false
           prerelease: true
           files: mirror-clone.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
