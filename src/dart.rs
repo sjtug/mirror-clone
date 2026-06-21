@@ -9,6 +9,23 @@ use serde_json::Value;
 use slog::{info, warn};
 use structopt::StructOpt;
 
+const PUB_DEV: &str = "https://pub.dev";
+
+fn archive_key(package_name: &str, version_name: &str, archive_url: &str) -> String {
+    let base_prefix = format!("{}/", PUB_DEV);
+    let archive_prefix = format!("{}/api/packages/", PUB_DEV);
+
+    if archive_url.starts_with(&base_prefix) {
+        return format!("packages/{}/versions/{}.tar.gz", package_name, version_name);
+    }
+
+    if let Some(key) = archive_url.strip_prefix(&archive_prefix) {
+        return key.to_string();
+    }
+
+    panic!("Unexpected archive URL format: {}", archive_url);
+}
+
 #[derive(Debug, Clone, StructOpt)]
 pub struct Dart {
     #[structopt(long, default_value = "https://mirrors.tuna.tsinghua.edu.cn/dart-pub")]
@@ -28,7 +45,7 @@ impl SnapshotStorage<SnapshotMeta> for Dart {
         let progress = mission.progress;
         let client = mission.client;
 
-        let api_base = format!("{}/api/packages", self.base);
+        let api_base = format!("{}/api/packages", PUB_DEV);
 
         info!(logger, "fetching packages...");
         let mut next_url = api_base.clone();
@@ -73,14 +90,13 @@ impl SnapshotStorage<SnapshotMeta> for Dart {
         let snapshots: Result<Vec<Vec<SnapshotMeta>>> =
             stream::iter(package_name.into_iter().map(|name| {
                 let client = client.clone();
-                let base = format!("{}/", self.base);
                 let progress = progress.clone();
                 let logger = logger.clone();
 
                 let func = async move {
                     progress.set_message(&name);
                     let package = client
-                        .get(format!("{}/api/packages/{}", base, name))
+                        .get(format!("{}/api/packages/{}", PUB_DEV, name))
                         .send()
                         .await?
                         .text()
@@ -90,17 +106,14 @@ impl SnapshotStorage<SnapshotMeta> for Dart {
                     let versions = data.get("versions").unwrap().as_array().unwrap();
                     let archives: Vec<SnapshotMeta> = versions
                         .iter()
-                        .filter_map(|version| version.get("archive_url"))
-                        .filter_map(|archive_url| archive_url.as_str())
-                        .map(|archive_url| {
-                            if archive_url.starts_with(&base) {
-                                SnapshotMeta {
-                                    key: archive_url[base.len()..].to_string(),
-                                    ..Default::default()
-                                }
-                            } else {
-                                panic!("Unmatched base URL {}", archive_url);
-                            }
+                        .filter_map(|version| {
+                            let version_name = version.get("version")?.as_str()?;
+                            let archive_url = version.get("archive_url")?.as_str()?;
+
+                            Some(SnapshotMeta {
+                                key: archive_key(&name, version_name, archive_url),
+                                ..Default::default()
+                            })
                         })
                         .collect();
 
