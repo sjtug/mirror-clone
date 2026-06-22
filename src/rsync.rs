@@ -27,6 +27,14 @@ use structopt::StructOpt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
+/// URL-encode each path segment of `key`, preserving `/` separators.
+fn encode_path_segments(key: &str) -> String {
+    key.split('/')
+        .map(urlencoding::encode)
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 #[derive(Debug, Clone, StructOpt)]
 pub struct Rsync {
     /// Rsync endpoint
@@ -156,6 +164,10 @@ impl SnapshotStorage<SnapshotMeta> for Rsync {
 #[async_trait]
 impl SourceStorage<SnapshotMeta, TransferURL> for Rsync {
     async fn get_object(&self, snapshot: &SnapshotMeta, _mission: &Mission) -> Result<TransferURL> {
-        Ok(TransferURL(format!("{}/{}", self.http_base, snapshot.key)))
+        Ok(TransferURL(format!(
+            "{}/{}",
+            self.http_base,
+            encode_path_segments(&snapshot.key)
+        )))
     }
 }
