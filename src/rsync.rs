@@ -81,12 +81,14 @@ impl SnapshotStorage<SnapshotMeta> for Rsync {
         cmd.arg("-r").arg(self.rsync_base.clone()).arg("--no-motd");
         cmd.stdout(Stdio::piped());
 
-        let mut child = cmd.spawn().expect("failed to spawn command");
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| Error::ProcessError(format!("failed to spawn rsync: {}", e)))?;
 
         let stdout = child
             .stdout
             .take()
-            .expect("child did not have a handle to stdout");
+            .ok_or_else(|| Error::ProcessError("child did not have a handle to stdout".into()))?;
 
         let mut reader = BufReader::new(stdout).lines();
 
