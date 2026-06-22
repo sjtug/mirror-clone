@@ -104,14 +104,20 @@ macro_rules! transfer {
                 let pipes = $pipes;
                 let source = pipes($source);
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
-                transfer.transfer().await.unwrap();
+                if let Err(err) = transfer.transfer().await {
+                    eprintln!("Fatal: transfer failed: {:?}", err);
+                    std::process::exit(1);
+                }
             }
             Target::File => {
                 let target: FileBackend = $opts.file_config.clone().into();
                 let pipes = $pipes;
                 let source = pipes($source);
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
-                transfer.transfer().await.unwrap();
+                if let Err(err) = transfer.transfer().await {
+                    eprintln!("Fatal: transfer failed: {:?}", err);
+                    std::process::exit(1);
+                }
             }
         }
     };
