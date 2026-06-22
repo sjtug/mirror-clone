@@ -101,6 +101,7 @@ impl SnapshotStorage<SnapshotMeta> for Rsync {
 
         let mut snapshot = vec![];
         let mut idx: usize = 0;
+        let mut symlink_count: u64 = 0;
 
         let timezone = chrono::Local::now().timezone();
 
@@ -141,7 +142,7 @@ impl SnapshotStorage<SnapshotMeta> for Rsync {
                     snapshot.push(meta);
                 }
                 if permission.starts_with('l') {
-                    warn!(logger, "symbolic link is not supported: {}", file);
+                    symlink_count += 1;
                 }
             }
         }
@@ -151,6 +152,13 @@ impl SnapshotStorage<SnapshotMeta> for Rsync {
         let status = result.await.unwrap()?;
         if !status.success() {
             return Err(Error::ProcessError(format!("exit code: {:?}", status)));
+        }
+
+        if symlink_count > 0 {
+            warn!(
+                logger,
+                "symbolic links are not supported, skipped {} symlink(s)", symlink_count
+            );
         }
 
         progress.finish_with_message("done");
