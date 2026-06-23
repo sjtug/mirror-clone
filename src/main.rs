@@ -104,20 +104,14 @@ macro_rules! transfer {
                 let pipes = $pipes;
                 let source = pipes($source);
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
-                if let Err(err) = transfer.transfer().await {
-                    eprintln!("Fatal: transfer failed: {:?}", err);
-                    std::process::exit(1);
-                }
+                transfer.transfer().await?
             }
             Target::File => {
                 let target: FileBackend = $opts.file_config.clone().into();
                 let pipes = $pipes;
                 let source = pipes($source);
                 let transfer = SimpleDiffTransfer::new(source, target, $transfer_config);
-                if let Err(err) = transfer.transfer().await {
-                    eprintln!("Fatal: transfer failed: {:?}", err);
-                    std::process::exit(1);
-                }
+                transfer.transfer().await?
             }
         }
     };
@@ -157,7 +151,7 @@ fn main() {
         snapshot_config,
     };
 
-    runtime.block_on(async {
+    if let Err(err) = runtime.block_on(async {
         let buffer_path = opts
             .s3_config
             .s3_buffer_path
@@ -395,5 +389,9 @@ fn main() {
                 transfer!(opts, indexed, transfer_config, id_pipe!());
             }
         }
-    });
+        Ok::<(), error::Error>(())
+    }) {
+        eprintln!("Fatal: transfer failed: {}", err);
+        std::process::exit(1);
+    }
 }
