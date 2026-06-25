@@ -13,15 +13,14 @@ use super::GhcupRepoConfig;
 
 lazy_static! {
     static ref YAML_CONFIG_PATTERN: regex::Regex =
-        regex::Regex::new(r"ghcup-(?P<ver>\d.\d.\d).yaml(?P<sig>.sig)?$").unwrap();
+        regex::Regex::new(r"ghcup-(?P<ver>\d+\.\d+\.\d+).yaml(?P<sig>\.sig)?$").unwrap();
 }
 
-// order is reverted to derive Ord ;)
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Version {
-    pub patch: usize,
-    pub minor: usize,
     pub major: usize,
+    pub minor: usize,
+    pub patch: usize,
 }
 
 impl Version {
