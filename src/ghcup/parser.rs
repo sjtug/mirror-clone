@@ -1,89 +1,51 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use serde::Deserialize;
+use serde_yaml::Value;
 
 use super::utils::Version;
+use crate::error::Result;
 
-pub const EXPECTED_CONFIG_VERSION: Version = Version::new(0, 0, 8);
+pub const EXPECTED_CONFIG_VERSION: Version = Version::new(0, 1, 0);
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DownloadSource {
-    pub dl_uri: String,
-    #[expect(dead_code)]
-    pub dl_hash: String,
+pub fn parse_uris_from_yaml(yaml_data: &[u8], include_old_versions: bool) -> Result<Vec<String>> {
+    let yaml_value: serde_yaml::Value = serde_yaml::from_slice(yaml_data)?;
+    let mut dl_uris = HashSet::new();
+    collect_dl_uris(&yaml_value, include_old_versions, &mut dl_uris);
+    Ok(dl_uris.into_iter().map(|s| s.to_string()).collect())
 }
 
-type DistributionRelease = HashMap<String, BinarySource>;
-type BinarySource = HashMap<String, DownloadSource>;
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Release {
-    pub vi_tags: Vec<String>,
-    #[serde(rename(deserialize = "viSourceDL"))]
-    pub vi_source_dl: Option<DownloadSource>,
-    pub vi_arch: HashMap<String, DistributionRelease>,
-}
-
-impl Release {
-    pub fn uris(&self) -> HashSet<&str> {
-        let mut binary_uris: HashSet<&str> = self
-            .vi_arch
-            .values()
-            .flat_map(|dist| {
-                dist.values()
-                    .flat_map(|bin_src| bin_src.values().map(|src| src.dl_uri.as_str()))
-            })
-            .collect();
-        if let Some(src) = self.vi_source_dl.as_ref() {
-            binary_uris.insert(src.dl_uri.as_str());
+fn collect_dl_uris<'a>(
+    value: &'a Value,
+    include_old_versions: bool,
+    dl_uris: &mut HashSet<&'a str>,
+) {
+    let Some(mapping) = value.as_mapping() else {
+        if let Some(sequence) = value.as_sequence() {
+            for item in sequence {
+                collect_dl_uris(item, include_old_versions, dl_uris);
+            }
         }
-        binary_uris
+        return;
+    };
+
+    if !include_old_versions && has_old_tag(value) {
+        return;
+    }
+
+    for (key, value) in mapping {
+        if key.as_str() == Some("dlUri")
+            && let Some(uri) = value.as_str()
+        {
+            dl_uris.insert(uri);
+        }
+
+        collect_dl_uris(value, include_old_versions, dl_uris);
     }
 }
 
-impl Release {
-    pub fn is_old(&self) -> bool {
-        self.vi_tags.iter().any(|item| item == "old")
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Components {
-    #[serde(rename = "Cabal")]
-    pub cabal: HashMap<String, Release>,
-    #[serde(rename = "HLS")]
-    pub hls: HashMap<String, Release>,
-    #[serde(rename = "GHCup")]
-    pub ghcup: HashMap<String, Release>,
-    #[serde(rename = "GHC")]
-    pub ghc: HashMap<String, Release>,
-    #[serde(rename = "Stack")]
-    pub stack: HashMap<String, Release>,
-}
-
-impl Components {
-    pub fn uris(&self, include_old_versions: bool) -> HashSet<&str> {
-        let fields: [&HashMap<String, Release>; 5] =
-            [&self.cabal, &self.hls, &self.ghcup, &self.ghc, &self.stack];
-        fields
-            .iter()
-            .flat_map(|field| {
-                field.values().flat_map(|release| {
-                    if !include_old_versions && release.is_old() {
-                        HashSet::new()
-                    } else {
-                        release.uris()
-                    }
-                })
-            })
-            .collect()
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GhcupYamlParser {
-    pub ghcup_downloads: Components,
+fn has_old_tag(value: &Value) -> bool {
+    let Some(tags) = value.get("viTags").and_then(|v| v.as_sequence()) else {
+        return false;
+    };
+    tags.iter().any(|s| s.as_str() == Some("old"))
 }
