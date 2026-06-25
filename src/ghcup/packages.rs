@@ -3,12 +3,13 @@ use slog::{info, warn};
 
 use crate::common::{Mission, SnapshotConfig, TransferURL};
 use crate::error::{Error, Result};
+use crate::ghcup::parser::parse_uris_from_yaml;
 use crate::ghcup::utils::get_raw_blob_url;
 use crate::metadata::SnapshotMeta;
 use crate::traits::{SnapshotStorage, SourceStorage};
 
 use super::GhcupRepoConfig;
-use super::parser::{EXPECTED_CONFIG_VERSION, GhcupYamlParser};
+use super::parser::EXPECTED_CONFIG_VERSION;
 use super::utils::{filter_map_file_objs, list_files};
 
 #[derive(Debug, Clone)]
@@ -55,14 +56,13 @@ impl SnapshotStorage<SnapshotMeta> for GhcupPackages {
             .await?
             .bytes()
             .await?;
-        let ghcup_config: GhcupYamlParser = serde_yaml::from_slice(&yaml_data)?;
 
-        let fetch_uris: Vec<_> = ghcup_config
-            .ghcup_downloads
-            .uris(self.include_old_versions)
+        let fetch_uris: Vec<_> = parse_uris_from_yaml(&yaml_data, self.include_old_versions)?
             .into_iter()
-            .filter_map(|s| s.strip_prefix("https://downloads.haskell.org/"))
-            .map(String::from)
+            .filter_map(|s| {
+                s.strip_prefix("https://downloads.haskell.org/")
+                    .map(String::from)
+            })
             .collect();
 
         progress.finish_with_message("done");
