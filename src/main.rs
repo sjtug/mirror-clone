@@ -42,6 +42,7 @@ mod lean;
 mod metadata;
 mod opts;
 mod pypi;
+mod pytorch_wheels;
 mod python_version;
 mod rewrite_pipe;
 mod rsync;
@@ -387,6 +388,9 @@ fn main() {
                 );
 
                 transfer!(opts, indexed, transfer_config, id_pipe!());
+            }
+            Source::PyTorchWheels(source) => {
+                transfer!(opts, source, transfer_config, id_pipe!());
             }
         }
         Ok::<(), error::Error>(())

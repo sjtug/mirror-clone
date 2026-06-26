@@ -317,21 +317,24 @@ where
         debug!(logger, "upload: {}", snapshot.key());
 
         let ByteStream {
-            object,
+            mut object,
             length,
             modified_at,
             content_type,
         } = byte_stream;
 
-        let body = S3ByteStream::read_from()
-            .path(
-                object
-                    .path()
-                    .ok_or_else(|| Error::PipeError("missing local object path".to_string()))?,
-            )
-            .build()
-            .await
-            .map_err(|err| s3_error("open upload body", err))?;
+        let body = if let Some(path) = object.path() {
+            S3ByteStream::read_from()
+                .path(path)
+                .build()
+                .await
+                .map_err(|err| s3_error("open upload body", err))?
+        } else {
+            let bytes = object
+                .take_bytes()
+                .ok_or_else(|| Error::PipeError("non-file object has no bytes".to_string()))?;
+            S3ByteStream::from(bytes)
+        };
 
         let mut metadata = self.gen_metadata();
         metadata.insert("clone-last-modified".to_string(), modified_at.to_string());

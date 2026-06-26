@@ -99,6 +99,13 @@ where
                         "data missing",
                     )));
                 }
+                ByteObject::Bytes(opt) => {
+                    let bytes = opt.as_ref().ok_or_else(|| {
+                        IOError::new(ErrorKind::NotFound, "data missing")
+                    })?;
+                    let mut cursor = std::io::Cursor::new(bytes.clone());
+                    calc_checksum(&mut cursor, method).await?
+                }
             };
 
             if expected_chksum != got_chksum.as_str() {

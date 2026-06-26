@@ -16,6 +16,7 @@ use slog::warn;
 use crate::common::{Mission, SnapshotConfig};
 use crate::error::{Error, Result};
 use crate::stream_pipe::{ByteObject, ByteStream};
+use bytes::Bytes;
 use crate::traits::{SnapshotStorage, SourceStorage};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
@@ -118,6 +119,33 @@ where
                     } else {
                         Err(Error::ProcessError(String::from(
                             "missing file when rewriting",
+                        )))
+                    }
+                }
+                ByteObject::Bytes(ref mut opt) => {
+                    if let Some(bytes) = opt.as_ref() {
+                        match String::from_utf8(bytes.to_vec()) {
+                            Err(_) => {
+                                warn!(logger, "rewrite_pipe: not valid UTF-8, ignored");
+                                Ok(byte_stream)
+                            }
+                            Ok(buffer) => match (self.rewrite_fn)(buffer) {
+                                Err(e) => {
+                                    warn!(logger, "rewrite_pipe: {:?}, ignored", e);
+                                    Ok(byte_stream)
+                                }
+                                Ok(content) => {
+                                    let content = content.into_bytes();
+                                    let content_length = content.len() as u64;
+                                    *opt = Some(Bytes::from(content));
+                                    byte_stream.length = content_length;
+                                    Ok(byte_stream)
+                                }
+                            },
+                        }
+                    } else {
+                        Err(Error::ProcessError(String::from(
+                            "missing bytes when rewriting",
                         )))
                     }
                 }

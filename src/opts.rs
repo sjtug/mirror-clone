@@ -8,6 +8,7 @@ use crate::gradle::Gradle;
 use crate::homebrew::HomebrewConfig;
 use crate::lean::elan::ElanConfig;
 use crate::pypi::Pypi as PypiConfig;
+use crate::pytorch_wheels::PyTorchWheels as PyTorchWheelsConfig;
 use crate::rsync::Rsync as RsyncConfig;
 use crate::rustup::Rustup as RustupConfig;
 use crate::{
@@ -40,6 +41,8 @@ pub enum Source {
     Rustup(RustupConfig),
     #[structopt(about = "elan")]
     Elan(ElanConfig),
+    #[structopt(about = "PyTorch wheels")]
+    PyTorchWheels(PyTorchWheelsConfig),
 }
 
 #[derive(Debug)]
