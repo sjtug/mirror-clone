@@ -100,9 +100,9 @@ where
                     )));
                 }
                 ByteObject::Bytes(opt) => {
-                    let bytes = opt.as_ref().ok_or_else(|| {
-                        IOError::new(ErrorKind::NotFound, "data missing")
-                    })?;
+                    let bytes = opt
+                        .as_ref()
+                        .ok_or_else(|| IOError::new(ErrorKind::NotFound, "data missing"))?;
                     let mut cursor = std::io::Cursor::new(bytes.clone());
                     calc_checksum(&mut cursor, method).await?
                 }

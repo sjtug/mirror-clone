@@ -41,7 +41,7 @@ pub enum Source {
     Rustup(RustupConfig),
     #[structopt(about = "elan")]
     Elan(ElanConfig),
-    #[structopt(about = "PyTorch wheels")]
+    #[structopt(name = "pytorch-wheels", about = "PyTorch wheels")]
     PyTorchWheels(PyTorchWheelsConfig),
 }
 

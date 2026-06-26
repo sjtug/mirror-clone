@@ -83,9 +83,9 @@ struct Anchor {
 impl Anchor {
     /// Whether this anchor carries PEP 658 metadata attributes.
     fn has_pep658_metadata(&self) -> bool {
-        self.attrs.iter().any(|(k, _)| {
-            k == "data-dist-info-metadata" || k == "data-core-metadata"
-        })
+        self.attrs
+            .iter()
+            .any(|(k, _)| k == "data-dist-info-metadata" || k == "data-core-metadata")
     }
 
     /// The fragment portion of the href (e.g. `#sha256=...`), if any.
@@ -114,7 +114,11 @@ fn classify_href(href: &str, r2_base: &str) -> Result<HostKind> {
                             "download-r2 URL missing /whl/ prefix: {path}"
                         ))
                     })?;
-                let remote_url = format!("{}{}", "https://download-r2.pytorch.org/whl", ensure_slash(&rest));
+                let remote_url = format!(
+                    "{}{}",
+                    "https://download-r2.pytorch.org/whl",
+                    ensure_slash(&rest)
+                );
                 Ok(HostKind::PyTorch(rest.to_string(), remote_url))
             }
             Some("files.pythonhosted.org") => {
@@ -127,8 +131,7 @@ fn classify_href(href: &str, r2_base: &str) -> Result<HostKind> {
                 Ok(HostKind::PythonHosted(rest.to_string()))
             }
             Some("pypi.nvidia.com") => {
-                let p = path_after_prefix(path, "https://pypi.nvidia.com/")
-                    .unwrap_or_default();
+                let p = path_after_prefix(path, "https://pypi.nvidia.com/").unwrap_or_default();
                 Ok(HostKind::Nvidia(p.to_string()))
             }
             Some(other) => Err(Error::ConfigureError(format!(
@@ -238,12 +241,12 @@ fn parse_link_names(html: &str) -> Vec<String> {
             if let tl::Node::Tag(tag) = node
                 && tag.name().as_utf8_str() == "a"
             {
-                    let text = tag.inner_text(dom.parser()).into_owned();
-                    let name = text.trim_end_matches('/').to_string();
-                    if !name.is_empty() {
-                        return Some(name);
-                    }
+                let text = tag.inner_text(dom.parser()).into_owned();
+                let name = text.trim_end_matches('/').to_string();
+                if !name.is_empty() {
+                    return Some(name);
                 }
+            }
             None
         })
         .collect()
@@ -310,14 +313,13 @@ struct CrawledProject {
 /// wheel/source URLs) rather than an intermediate index (anchors are bare
 /// sub-directory links).  Content-based, no name heuristics.
 fn is_leaf_project_page(anchors: &[Anchor], r2_base: &str) -> bool {
-    anchors.iter().any(|a| classify_href(&a.href, r2_base).is_ok())
+    anchors
+        .iter()
+        .any(|a| classify_href(&a.href, r2_base).is_ok())
 }
 
 /// Process a single project page's anchors.
-fn process_project_page(
-    anchors: &[Anchor],
-    r2_base: &str,
-) -> Result<ProjectResult> {
+fn process_project_page(anchors: &[Anchor], r2_base: &str) -> Result<ProjectResult> {
     let mut anchors_html = vec![];
     let mut remote_objects = vec![];
     let mut has_pytorch = false;
@@ -333,10 +335,8 @@ fn process_project_page(
                 anchors_html.push(build_anchor_html(&rewritten, &anchor.text, &anchor.attrs));
                 remote_objects.push((key.clone(), remote_url.clone()));
                 if anchor.has_pep658_metadata() {
-                    remote_objects.push((
-                        format!("{key}.metadata"),
-                        format!("{remote_url}.metadata"),
-                    ));
+                    remote_objects
+                        .push((format!("{key}.metadata"), format!("{remote_url}.metadata")));
                 }
             }
             HostKind::PythonHosted(rest) => {
@@ -353,7 +353,11 @@ fn process_project_page(
     }
 
     Ok(ProjectResult {
-        anchors_html: if has_pytorch { Some(anchors_html) } else { None },
+        anchors_html: if has_pytorch {
+            Some(anchors_html)
+        } else {
+            None
+        },
         remote_objects,
     })
 }
@@ -478,8 +482,7 @@ impl SnapshotStorage<SnapshotPath> for PyTorchWheels {
             } else {
                 warn!(
                     logger,
-                    "skipping project {}: no PyTorch-hosted links",
-                    c.page_key
+                    "skipping project {}: no PyTorch-hosted links", c.page_key
                 );
             }
             for (key, remote_url) in c.result.remote_objects {
@@ -515,15 +518,10 @@ impl SnapshotStorage<SnapshotPath> for PyTorchWheels {
 
 #[async_trait]
 impl SourceStorage<SnapshotPath, ByteStream> for PyTorchWheels {
-    async fn get_object(
-        &self,
-        snapshot: &SnapshotPath,
-        mission: &Mission,
-    ) -> Result<ByteStream> {
-        let kind = self
-            .objects
-            .get(&snapshot.0)
-            .ok_or_else(|| Error::PipeError(format!("unknown pytorch-wheels key: {}", snapshot.0)))?;
+    async fn get_object(&self, snapshot: &SnapshotPath, mission: &Mission) -> Result<ByteStream> {
+        let kind = self.objects.get(&snapshot.0).ok_or_else(|| {
+            Error::PipeError(format!("unknown pytorch-wheels key: {}", snapshot.0))
+        })?;
 
         match kind {
             ObjectKind::GeneratedHtml(body) => {
@@ -582,7 +580,10 @@ mod tests {
             text: "certifi-2022.12.7-py3-none-any.whl".to_string(),
             attrs: vec![],
         }];
-        assert!(is_leaf_project_page(&anchors, "https://download-r2.pytorch.org/whl"));
+        assert!(is_leaf_project_page(
+            &anchors,
+            "https://download-r2.pytorch.org/whl"
+        ));
     }
 
     #[test]
@@ -590,10 +591,21 @@ mod tests {
         // An intermediate index has only bare sub-directory links (no wheel URLs).
         // `classify_href` fails on these, so the page is treated as intermediate.
         let anchors = vec![
-            Anchor { href: "torch/".to_string(), text: "torch".to_string(), attrs: vec![] },
-            Anchor { href: "certifi/".to_string(), text: "certifi".to_string(), attrs: vec![] },
+            Anchor {
+                href: "torch/".to_string(),
+                text: "torch".to_string(),
+                attrs: vec![],
+            },
+            Anchor {
+                href: "certifi/".to_string(),
+                text: "certifi".to_string(),
+                attrs: vec![],
+            },
         ];
-        assert!(!is_leaf_project_page(&anchors, "https://download-r2.pytorch.org/whl"));
+        assert!(!is_leaf_project_page(
+            &anchors,
+            "https://download-r2.pytorch.org/whl"
+        ));
     }
 
     #[test]
@@ -604,7 +616,10 @@ mod tests {
         ).unwrap();
         match kind {
             HostKind::PyTorch(rest, remote) => {
-                assert_eq!(rest, "cu128/torch-2.10.0+cu128-cp310-cp310-manylinux_2_28_x86_64.whl");
+                assert_eq!(
+                    rest,
+                    "cu128/torch-2.10.0+cu128-cp310-cp310-manylinux_2_28_x86_64.whl"
+                );
                 assert!(remote.starts_with("https://download-r2.pytorch.org/whl/"));
             }
             _ => panic!("expected PyTorch"),
@@ -616,11 +631,15 @@ mod tests {
         let kind = classify_href(
             "/whl/certifi-2022.12.7-py3-none-any.whl#sha256=def",
             "https://download-r2.pytorch.org/whl",
-        ).unwrap();
+        )
+        .unwrap();
         match kind {
             HostKind::PyTorch(rest, remote) => {
                 assert_eq!(rest, "certifi-2022.12.7-py3-none-any.whl");
-                assert_eq!(remote, "https://download-r2.pytorch.org/whl/certifi-2022.12.7-py3-none-any.whl");
+                assert_eq!(
+                    remote,
+                    "https://download-r2.pytorch.org/whl/certifi-2022.12.7-py3-none-any.whl"
+                );
             }
             _ => panic!("expected PyTorch"),
         }
@@ -631,7 +650,8 @@ mod tests {
         let kind = classify_href(
             "https://files.pythonhosted.org/packages/aa/bb/numpy-1.0.1.tar.gz#sha256=xyz",
             "https://download-r2.pytorch.org/whl",
-        ).unwrap();
+        )
+        .unwrap();
         match kind {
             HostKind::PythonHosted(rest) => {
                 assert_eq!(rest, "aa/bb/numpy-1.0.1.tar.gz");
@@ -674,8 +694,14 @@ mod tests {
         assert!(result.anchors_html.is_some());
         // Wheel + metadata sidecar
         assert_eq!(result.remote_objects.len(), 2);
-        assert_eq!(result.remote_objects[0].0, "cu128/torch-2.10.0+cu128-cp310-cp310-manylinux_2_28_x86_64.whl");
-        assert_eq!(result.remote_objects[1].0, "cu128/torch-2.10.0+cu128-cp310-cp310-manylinux_2_28_x86_64.whl.metadata");
+        assert_eq!(
+            result.remote_objects[0].0,
+            "cu128/torch-2.10.0+cu128-cp310-cp310-manylinux_2_28_x86_64.whl"
+        );
+        assert_eq!(
+            result.remote_objects[1].0,
+            "cu128/torch-2.10.0+cu128-cp310-cp310-manylinux_2_28_x86_64.whl.metadata"
+        );
     }
 
     #[test]
@@ -706,12 +732,14 @@ mod tests {
     fn process_mixed_pytorch_and_pythonhosted() {
         let anchors = vec![
             Anchor {
-                href: "https://download-r2.pytorch.org/whl/cu128/torch-1.0%2Bcu128.whl#sha256=abc".to_string(),
+                href: "https://download-r2.pytorch.org/whl/cu128/torch-1.0%2Bcu128.whl#sha256=abc"
+                    .to_string(),
                 text: "torch-1.0+cu128.whl".to_string(),
                 attrs: vec![],
             },
             Anchor {
-                href: "https://files.pythonhosted.org/packages/aa/bb/numpy-1.0.whl#sha256=def".to_string(),
+                href: "https://files.pythonhosted.org/packages/aa/bb/numpy-1.0.whl#sha256=def"
+                    .to_string(),
                 text: "numpy-1.0.whl".to_string(),
                 attrs: vec![],
             },
@@ -783,7 +811,10 @@ mod tests {
         assert!(html[0].contains(r#"href="/pytorch-wheels/cu128/torch-1.0+cu128-cp310-cp310-manylinux_2_28_x86_64.whl#sha256=abc""#));
         // Scheduled for caching (exactly one remote wheel object).
         assert_eq!(result.remote_objects.len(), 1);
-        assert_eq!(result.remote_objects[0].0, "cu128/torch-1.0+cu128-cp310-cp310-manylinux_2_28_x86_64.whl");
+        assert_eq!(
+            result.remote_objects[0].0,
+            "cu128/torch-1.0+cu128-cp310-cp310-manylinux_2_28_x86_64.whl"
+        );
     }
 
     /// Spec: redirect `files.pythonhosted.org` links to `/pypi-packages`.

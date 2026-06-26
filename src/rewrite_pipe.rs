@@ -16,8 +16,8 @@ use slog::warn;
 use crate::common::{Mission, SnapshotConfig};
 use crate::error::{Error, Result};
 use crate::stream_pipe::{ByteObject, ByteStream};
-use bytes::Bytes;
 use crate::traits::{SnapshotStorage, SourceStorage};
+use bytes::Bytes;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 pub struct RewritePipe<Source, RewriteItem, F>
