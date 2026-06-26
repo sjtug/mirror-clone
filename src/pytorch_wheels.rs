@@ -16,8 +16,6 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::DateTime;
 use futures_util::{StreamExt, TryStreamExt, stream};
-use once_cell::sync::Lazy;
-use regex::Regex;
 use reqwest::Client;
 use slog::{info, warn};
 use structopt::StructOpt;
@@ -28,9 +26,6 @@ use crate::error::{Error, Result};
 use crate::stream_pipe::{ByteObject, ByteStream};
 use crate::traits::{SnapshotStorage, SourceStorage};
 use crate::utils::bar;
-
-/// Regex matching CUDA track names: plain `cu<num>` only.
-static TRACK_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^cu[0-9]+$").unwrap());
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct PyTorchWheels {
@@ -300,6 +295,24 @@ struct ProjectResult {
     remote_objects: Vec<(String, String)>,
 }
 
+/// A crawled project, located either at the root or under a track.
+struct CrawledProject {
+    /// S3 key for the generated project page: `project` (root) or
+    /// `{track}/{project}`.
+    page_key: String,
+    /// `None` for root-level projects; `Some(track)` for projects under a track.
+    track: Option<String>,
+    project: String,
+    result: ProjectResult,
+}
+
+/// Whether a fetched page is a leaf project page (its anchors contain
+/// wheel/source URLs) rather than an intermediate index (anchors are bare
+/// sub-directory links).  Content-based, no name heuristics.
+fn is_leaf_project_page(anchors: &[Anchor], r2_base: &str) -> bool {
+    anchors.iter().any(|a| classify_href(&a.href, r2_base).is_ok())
+}
+
 /// Process a single project page's anchors.
 fn process_project_page(
     anchors: &[Anchor],
@@ -356,51 +369,74 @@ impl SnapshotStorage<SnapshotPath> for PyTorchWheels {
         let progress = mission.progress;
         let client = mission.client;
 
-        // 1. Fetch root index and discover CUDA tracks.
+        // 1. Fetch the root Simple index and collect every top-level entry.
+        //    We do NOT filter by name (e.g. `cu[0-9]+`): we only care about the
+        //    source URLs in the project pages beneath each entry, not the
+        //    entry/track names.
         info!(logger, "fetching PyTorch wheel root index...");
         let root_html = fetch_text(&client, &format!("{}/", self.whl_base)).await?;
-        let all_names = parse_link_names(&root_html);
-        let tracks: Vec<String> = all_names
-            .into_iter()
-            .filter(|name| TRACK_RE.is_match(name))
-            .collect();
-        info!(logger, "discovered {} CUDA tracks: {:?}", tracks.len(), tracks);
-
-        // 2. Fetch each track index and collect project names.
-        progress.set_length(tracks.len() as u64);
-        progress.set_style(bar());
+        let top_names = parse_link_names(&root_html);
+        info!(logger, "discovered {} top-level entries", top_names.len());
 
         let r2_base = self.r2_base.clone();
         let whl_base = self.whl_base.clone();
 
-        let track_projects: Vec<(String, Vec<String>)> =
-            stream::iter(tracks.into_iter().map(|track| {
+        // 2. Fetch each top-level page concurrently, then classify it by
+        //    content: a leaf project page has wheel/source anchors; an
+        //    intermediate index has only bare sub-directory links.
+        progress.set_length(top_names.len() as u64);
+        progress.set_style(bar());
+
+        let top_pages: Vec<(String, Vec<Anchor>)> =
+            stream::iter(top_names.into_iter().map(|name| {
                 let client = client.clone();
                 let whl_base = whl_base.clone();
                 let progress = progress.clone();
                 async move {
-                    progress.set_message(&track);
-                    let url = format!("{}/{}/", whl_base, track);
+                    progress.set_message(&name);
+                    let url = format!("{}/{}/", whl_base, name);
                     let html = fetch_text(&client, &url).await?;
-                    let projects = parse_link_names(&html);
+                    let anchors = parse_anchors(&html);
                     progress.inc(1);
-                    Ok::<_, Error>((track, projects))
+                    Ok::<_, Error>((name, anchors))
                 }
             }))
             .buffer_unordered(config.concurrent_resolve)
             .try_collect()
             .await?;
 
-        // Flatten (track, project) pairs before streaming.
-        let track_project_pairs: Vec<(String, String)> = track_projects
-            .into_iter()
-            .flat_map(|(track, projects)| {
-                projects.into_iter().map(move |project| (track.clone(), project))
-            })
-            .collect();
+        // 3. Process each top-level page: either treat it as a leaf project
+        //    (process its anchors directly) or recurse one level into its
+        //    sub-links as projects.
+        let mut crawled: Vec<CrawledProject> = vec![];
+        let mut sub_pairs: Vec<(String, String)> = vec![];
 
-        let project_results: Vec<(String, String, ProjectResult)> =
-            stream::iter(track_project_pairs.into_iter().map(|(track, project)| {
+        for (name, anchors) in &top_pages {
+            if is_leaf_project_page(anchors, &r2_base) {
+                let result = process_project_page(anchors, &r2_base)?;
+                crawled.push(CrawledProject {
+                    page_key: name.clone(),
+                    track: None,
+                    project: name.clone(),
+                    result,
+                });
+            } else {
+                // Intermediate index: every anchor is a sub-directory link.
+                for a in anchors {
+                    let sub = a.text.trim_end_matches('/').to_string();
+                    if !sub.is_empty() {
+                        sub_pairs.push((name.clone(), sub));
+                    }
+                }
+            }
+        }
+
+        // 4. Fetch each sub-project page concurrently and process it.
+        progress.set_length(sub_pairs.len() as u64);
+        progress.set_style(bar());
+
+        let sub_results: Vec<CrawledProject> =
+            stream::iter(sub_pairs.into_iter().map(|(track, project)| {
                 let client = client.clone();
                 let whl_base = whl_base.clone();
                 let r2_base = r2_base.clone();
@@ -412,36 +448,41 @@ impl SnapshotStorage<SnapshotPath> for PyTorchWheels {
                     let anchors = parse_anchors(&html);
                     let result = process_project_page(&anchors, &r2_base)?;
                     progress.inc(1);
-                    Ok::<_, Error>((track, project, result))
+                    Ok::<_, Error>(CrawledProject {
+                        page_key: format!("{track}/{project}"),
+                        track: Some(track),
+                        project,
+                        result,
+                    })
                 }
             }))
             .buffer_unordered(config.concurrent_resolve)
             .try_collect()
             .await?;
 
-        // 4. Build objects map and snapshot list.
+        crawled.extend(sub_results);
+
+        // 5. Build objects map and snapshot list from the crawled projects.
         let mut objects = HashMap::new();
         let mut snapshot = vec![];
         let mut track_projects_map: HashMap<String, Vec<String>> = HashMap::new();
 
-        for (track, project, result) in project_results {
-            if let Some(anchors_html) = result.anchors_html {
-                // Project page has PyTorch-hosted links — include it.
-                let html = build_project_html(&project, &anchors_html);
-                let key = format!("{track}/{project}");
-                objects.insert(key.clone(), ObjectKind::GeneratedHtml(html));
-                snapshot.push(SnapshotPath::force(key));
-                track_projects_map
-                    .entry(track)
-                    .or_default()
-                    .push(project);
+        for c in crawled {
+            if let Some(anchors_html) = c.result.anchors_html {
+                let html = build_project_html(&c.project, &anchors_html);
+                objects.insert(c.page_key.clone(), ObjectKind::GeneratedHtml(html));
+                snapshot.push(SnapshotPath::force(c.page_key.clone()));
+                if let Some(track) = c.track {
+                    track_projects_map.entry(track).or_default().push(c.project);
+                }
             } else {
                 warn!(
                     logger,
-                    "skipping project {track}/{project}: no PyTorch-hosted links"
+                    "skipping project {}: no PyTorch-hosted links",
+                    c.page_key
                 );
             }
-            for (key, remote_url) in result.remote_objects {
+            for (key, remote_url) in c.result.remote_objects {
                 if !objects.contains_key(&key) {
                     objects.insert(key.clone(), ObjectKind::Remote(remote_url));
                     snapshot.push(SnapshotPath::new(key));
@@ -449,7 +490,8 @@ impl SnapshotStorage<SnapshotPath> for PyTorchWheels {
             }
         }
 
-        // 5. Generate track-index pages.
+        // 6. Generate one track-index page per intermediate index that has at
+        //    least one included project.
         let mut sorted_tracks: Vec<_> = track_projects_map.keys().cloned().collect();
         sorted_tracks.sort();
         for track in &sorted_tracks {
@@ -530,23 +572,28 @@ impl SourceStorage<SnapshotPath, ByteStream> for PyTorchWheels {
 mod tests {
     use super::*;
 
+    // --- Crawl discrimination (content-based, no name heuristics) ---
+
     #[test]
-    fn track_regex_matches_plain_cu() {
-        assert!(TRACK_RE.is_match("cu128"));
-        assert!(TRACK_RE.is_match("cu130"));
-        assert!(TRACK_RE.is_match("cu75"));
+    fn leaf_project_page_detected_by_wheel_anchors() {
+        // A leaf project page has wheel/source anchors.
+        let anchors = vec![Anchor {
+            href: "/whl/certifi-2022.12.7-py3-none-any.whl#sha256=def".to_string(),
+            text: "certifi-2022.12.7-py3-none-any.whl".to_string(),
+            attrs: vec![],
+        }];
+        assert!(is_leaf_project_page(&anchors, "https://download-r2.pytorch.org/whl"));
     }
 
     #[test]
-    fn track_regex_rejects_non_tracks() {
-        assert!(!TRACK_RE.is_match("cpu"));
-        assert!(!TRACK_RE.is_match("cpu-cxx11-abi"));
-        assert!(!TRACK_RE.is_match("cu128-full"));
-        assert!(!TRACK_RE.is_match("cu121-pypi-cudnn"));
-        assert!(!TRACK_RE.is_match("rocm6.4"));
-        assert!(!TRACK_RE.is_match("xpu"));
-        assert!(!TRACK_RE.is_match("nightly"));
-        assert!(!TRACK_RE.is_match("torch"));
+    fn intermediate_index_detected_by_subdir_links() {
+        // An intermediate index has only bare sub-directory links (no wheel URLs).
+        // `classify_href` fails on these, so the page is treated as intermediate.
+        let anchors = vec![
+            Anchor { href: "torch/".to_string(), text: "torch".to_string(), attrs: vec![] },
+            Anchor { href: "certifi/".to_string(), text: "certifi".to_string(), attrs: vec![] },
+        ];
+        assert!(!is_leaf_project_page(&anchors, "https://download-r2.pytorch.org/whl"));
     }
 
     #[test]
