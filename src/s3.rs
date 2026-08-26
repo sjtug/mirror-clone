@@ -24,7 +24,11 @@ use crate::stream_pipe::ByteStream;
 use crate::traits::{Key, SnapshotStorage, TargetStorage};
 
 use async_trait::async_trait;
-use aws_sdk_s3::{Client as S3Client, config::Region, primitives::ByteStream as S3ByteStream};
+use aws_sdk_s3::{
+    Client as S3Client,
+    config::{Region, RequestChecksumCalculation},
+    primitives::ByteStream as S3ByteStream,
+};
 use futures_util::{StreamExt, stream};
 use slog::{debug, info, warn};
 
@@ -63,6 +67,8 @@ impl S3Backend {
             .region(Region::new("jCloud S3"))
             .endpoint_url(config.endpoint.clone())
             .force_path_style(true)
+            // Avoid AWS-chunked trailers unsupported by jCloud S3.
+            .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
             .build();
         let client = S3Client::from_conf(s3_config);
         Self { config, client }
