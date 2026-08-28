@@ -28,6 +28,12 @@ pub enum Error {
     HTTPError(reqwest::StatusCode),
     #[error("Pipe Error {0}")]
     PipeError(String),
+    #[error("{failed} of {attempted} {operation} operations failed")]
+    TransferError {
+        operation: &'static str,
+        failed: usize,
+        attempted: usize,
+    },
     #[error("Json Decode Error {0}")]
     JsonDecodeError(#[from] serde_json::Error),
     #[error("Yaml Decode Error {0}")]

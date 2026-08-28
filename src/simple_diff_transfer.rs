@@ -12,8 +12,9 @@
 //! The snapshot object should support `Metadata` trait, and simple diff
 //! transfer will transfer them from highest priority to lowest priority.
 //!
-//! If transfer of an object fails, it will be simply ignored. We could
-//! later implement some kind of retry logic.
+//! All planned updates are attempted. If any update fails, the transfer returns an
+//! error and skips deletion so a retry cannot remove old objects before their
+//! replacements are available. Delete failures likewise make the transfer fail.
 
 use futures_util::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar};
@@ -279,33 +280,36 @@ where
             let target = target.clone();
             let source_mission = source_mission.clone();
             let target_mission = target_mission.clone();
-            let logger = logger.clone();
 
-            let func = async move {
+            async move {
                 match plan {
-                    PlanType::Update => match source.get_object(&snapshot, &source_mission).await {
-                        Ok(source_object) => {
-                            if let Err(err) = target
-                                .put_object(&snapshot, source_object, &target_mission)
-                                .await
-                            {
-                                warn!(
-                                    target_mission.logger,
-                                    "error while put {}: {:?}",
-                                    snapshot.key(),
-                                    err
-                                );
-                            }
-                        }
-                        Err(err) => {
+                    PlanType::Update => {
+                        let source_object =
+                            match source.get_object(&snapshot, &source_mission).await {
+                                Ok(source_object) => source_object,
+                                Err(err) => {
+                                    warn!(
+                                        target_mission.logger,
+                                        "error while get {}: {:?}",
+                                        snapshot.key(),
+                                        err
+                                    );
+                                    return Err(err);
+                                }
+                            };
+                        if let Err(err) = target
+                            .put_object(&snapshot, source_object, &target_mission)
+                            .await
+                        {
                             warn!(
                                 target_mission.logger,
-                                "error while get {}: {:?}",
+                                "error while put {}: {:?}",
                                 snapshot.key(),
                                 err
                             );
+                            return Err(err);
                         }
-                    },
+                    }
                     PlanType::Delete => {
                         if let Err(err) = target
                             .delete_object(&snapshot, &target_mission)
@@ -319,35 +323,48 @@ where
                                 snapshot.key(),
                                 err
                             );
+                            return Err(err);
                         }
                     }
                 }
 
-                Ok::<(), Error>(())
-            };
-
-            async move {
-                if let Err(err) = func.await {
-                    warn!(logger, "failed to transfer {:?}", err);
-                }
+                Ok(())
             }
         };
 
+        let update_count = updates.len();
         let mut results = stream::iter(
             updates
                 .into_iter()
                 .map(|plan| map_snapshot(plan, PlanType::Update)),
         )
         .buffer_unordered(self.config.concurrent_transfer);
+        let mut failed_updates = 0;
 
-        while let Some(_x) = results.next().await {
+        while let Some(result) = results.next().await {
+            if result.is_err() {
+                failed_updates += 1;
+            }
             progress.inc(1);
+        }
+
+        if failed_updates > 0 {
+            warn!(
+                logger,
+                "{} of {} updates failed; skipping deletion", failed_updates, update_count
+            );
+            return Err(Error::TransferError {
+                operation: "update",
+                failed: failed_updates,
+                attempted: update_count,
+            });
         }
 
         if !self.config.no_delete {
             info!(logger, "deleting objects");
 
-            progress.set_length(deletions.len() as u64);
+            let deletion_count = deletions.len();
+            progress.set_length(deletion_count as u64);
             progress.set_position(0);
 
             let mut results = stream::iter(
@@ -356,14 +373,138 @@ where
                     .map(|plan| map_snapshot(plan, PlanType::Delete)),
             )
             .buffer_unordered(self.config.concurrent_transfer);
+            let mut failed_deletions = 0;
 
-            while let Some(_x) = results.next().await {
+            while let Some(result) = results.next().await {
+                if result.is_err() {
+                    failed_deletions += 1;
+                }
                 progress.inc(1);
+            }
+
+            if failed_deletions > 0 {
+                return Err(Error::TransferError {
+                    operation: "delete",
+                    failed: failed_deletions,
+                    attempted: deletion_count,
+                });
             }
         }
 
         info!(logger, "transfer complete");
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::SnapshotPath;
+    use crate::traits::{SnapshotStorage, SourceStorage, TargetStorage};
+    use async_trait::async_trait;
+    use std::sync::{Arc, Mutex};
+
+    struct FailingSource;
+
+    #[async_trait]
+    impl SnapshotStorage<SnapshotPath> for FailingSource {
+        async fn snapshot(
+            &mut self,
+            _mission: Mission,
+            _config: &SnapshotConfig,
+        ) -> Result<Vec<SnapshotPath>> {
+            Ok(vec![SnapshotPath::new("new".to_string())])
+        }
+
+        fn info(&self) -> String {
+            "failing source".to_string()
+        }
+    }
+
+    #[async_trait]
+    impl SourceStorage<SnapshotPath, ()> for FailingSource {
+        async fn get_object(&self, _snapshot: &SnapshotPath, _mission: &Mission) -> Result<()> {
+            Err(Error::PipeError("expected update failure".to_string()))
+        }
+    }
+
+    struct RecordingTarget {
+        deleted: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl SnapshotStorage<SnapshotPath> for RecordingTarget {
+        async fn snapshot(
+            &mut self,
+            _mission: Mission,
+            _config: &SnapshotConfig,
+        ) -> Result<Vec<SnapshotPath>> {
+            Ok(vec![SnapshotPath::new("stale".to_string())])
+        }
+
+        fn info(&self) -> String {
+            "recording target".to_string()
+        }
+    }
+
+    #[async_trait]
+    impl TargetStorage<SnapshotPath, ()> for RecordingTarget {
+        async fn put_object(
+            &self,
+            _snapshot: &SnapshotPath,
+            _item: (),
+            _mission: &Mission,
+        ) -> Result<()> {
+            Ok(())
+        }
+
+        async fn delete_object(&self, snapshot: &SnapshotPath, _mission: &Mission) -> Result<()> {
+            self.deleted
+                .lock()
+                .unwrap()
+                .push(snapshot.key().to_string());
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_update_fails_transfer_and_skips_deletion() {
+        // This test is the only transfer test that mutates this process-wide value,
+        // and it leaves the value installed for the rest of the test process.
+        unsafe { std::env::set_var("MIRROR_CLONE_SITE", "test.invalid") };
+
+        let deleted = Arc::new(Mutex::new(vec![]));
+        let transfer = SimpleDiffTransfer::new(
+            FailingSource,
+            RecordingTarget {
+                deleted: deleted.clone(),
+            },
+            SimpleDiffTransferConfig {
+                progress: false,
+                concurrent_transfer: 2,
+                no_delete: false,
+                dry_run: false,
+                snapshot_config: SnapshotConfig {
+                    concurrent_resolve: 1,
+                },
+                print_plan: 0,
+                force_all: false,
+            },
+        );
+
+        let result = transfer.transfer().await;
+        assert!(matches!(
+            result,
+            Err(Error::TransferError {
+                operation: "update",
+                failed: 1,
+                attempted: 1,
+            })
+        ));
+        assert!(
+            deleted.lock().unwrap().is_empty(),
+            "deletions must be skipped after an update failure"
+        );
     }
 }
