@@ -13,6 +13,7 @@ use std::env;
 use async_trait::async_trait;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use google_bigquery2::api::QueryRequest;
+use google_bigquery2::hyper::Uri;
 use google_bigquery2::hyper_rustls::{self, HttpsConnectorBuilder};
 use google_bigquery2::hyper_util::{self, client::legacy::connect::HttpConnector};
 use google_bigquery2::yup_oauth2::authenticator::ApplicationDefaultCredentialsTypes;
@@ -22,6 +23,7 @@ use google_bigquery2::yup_oauth2::{
 use google_bigquery2::{Bigquery, common, yup_oauth2};
 use regex::Regex;
 use reqwest::Client;
+use rigetti_hyper_proxy::{Intercept, Proxy, ProxyConnector};
 use serde_json::Value;
 use slog::{Logger, info, warn};
 use structopt::StructOpt;
@@ -105,16 +107,47 @@ async fn pypi_index(
         .collect())
 }
 
-type BigqueryConnector = hyper_rustls::HttpsConnector<HttpConnector>;
+type DirectBigqueryConnector = hyper_rustls::HttpsConnector<HttpConnector>;
+type BigqueryConnector = ProxyConnector<DirectBigqueryConnector>;
 type BigqueryClient = common::Client<BigqueryConnector>;
 
+/// Read the first configured HTTP(S) proxy URI. Hyper does not honor the
+/// conventional proxy environment variables itself, so the BigQuery client needs
+/// an explicit proxy connector. reqwest already handles these variables for the
+/// package-download side of the mirror.
+fn proxy_uri() -> Result<Option<Uri>> {
+    for name in ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"] {
+        if let Ok(value) = env::var(name)
+            && !value.is_empty()
+        {
+            let uri = value.parse::<Uri>().map_err(|err| {
+                Error::ConfigureError(format!("invalid {name} URI {value:?}: {err}"))
+            })?;
+            match uri.scheme_str() {
+                Some("http" | "https") => return Ok(Some(uri)),
+                scheme => {
+                    return Err(Error::ConfigureError(format!(
+                        "unsupported {name} proxy scheme {scheme:?}; expected http or https"
+                    )));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
 fn https_connector() -> Result<BigqueryConnector> {
-    Ok(HttpsConnectorBuilder::new()
+    let direct = HttpsConnectorBuilder::new()
         .with_native_roots()?
         .https_or_http()
         .enable_http1()
         .enable_http2()
-        .build())
+        .build();
+    let mut connector = ProxyConnector::new(direct)?;
+    if let Some(uri) = proxy_uri()? {
+        connector.add_proxy(Proxy::new(Intercept::All, uri));
+    }
+    Ok(connector)
 }
 
 fn bigquery_client() -> Result<BigqueryClient> {
@@ -151,7 +184,9 @@ async fn bigquery_hub() -> Result<Bigquery<BigqueryConnector>> {
 
 async fn bigquery_index(logger: &Logger) -> Result<Vec<String>> {
     info!(logger, "executing bigquery query...");
-    let prj_id = env::var("PROJECT_ID").expect("Environment variable PROJECT_ID");
+    let prj_id = env::var("PROJECT_ID").map_err(|_| {
+        Error::ConfigureError("PROJECT_ID environment variable is not set".to_string())
+    })?;
 
     let hub = bigquery_hub().await?;
 
@@ -168,18 +203,24 @@ async fn bigquery_index(logger: &Logger) -> Result<Vec<String>> {
         .doit()
         .await?;
 
-    Ok(resp
+    let projects: Vec<String> = resp
         .rows
-        .expect("rows")
+        .ok_or_else(|| Error::PipeError("bigquery response has no rows".to_string()))?
         .into_iter()
-        .map(|row| {
-            let row = row.f.expect("columns");
-            match row.into_iter().next().expect("project").v {
-                Some(Value::String(s)) => s,
-                _ => panic!("invalid project name"),
+        .map(|row| -> Result<String> {
+            let row = row.f.ok_or_else(|| {
+                Error::PipeError("bigquery response row has no columns".to_string())
+            })?;
+            match row.into_iter().next().and_then(|col| col.v) {
+                Some(Value::String(s)) => Ok(s),
+                _ => Err(Error::PipeError(
+                    "bigquery response row has invalid project name".to_string(),
+                )),
             }
         })
-        .collect())
+        .collect::<Result<Vec<String>>>()?;
+
+    Ok(projects)
 }
 
 fn version_from_filename(filename: &str) -> Option<Version> {
