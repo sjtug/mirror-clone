@@ -80,7 +80,10 @@ pub struct S3CliConfig {
     pub s3_prefix: Option<String>,
     #[structopt(long, help = "Buffer data to this temporary directory")]
     pub s3_buffer_path: Option<String>,
-    #[structopt(long, help = "Prefix hint mode, to accelerate scanning")]
+    #[structopt(
+        long,
+        help = "Prefix hint mode, to accelerate scanning: 'pypi' shards by /00../ff, 'conda' by channel/platform/file-name prefixes"
+    )]
     pub s3_prefix_hint_mode: Option<String>,
     #[structopt(long, help = "Max keys to list at a time", default_value = "1000")]
     pub s3_max_keys: u64,

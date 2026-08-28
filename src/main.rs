@@ -125,8 +125,27 @@ const HLS_URL: &str = "https://github.com/haskell/haskell-language-server";
 const STACK_URL: &str = "https://github.com/commercialhaskell/stack";
 const HASKELL_URL: &str = "https://downloads.haskell.org";
 
+/// Install the process-level rustls CryptoProvider.
+///
+/// Both the `ring` and `aws-lc-rs` rustls features end up enabled in this crate
+/// (google-bigquery2/yup-oauth2 enable `ring`; reqwest and aws-sdk-s3 enable
+/// `aws-lc-rs`), so `CryptoProvider::from_crate_features()` cannot pick a provider
+/// and rustls panics with "Could not automatically determine the process-level
+/// CryptoProvider" on the first `ClientConfig::builder()` call. `aws-lc-rs` matches
+/// what the AWS SDK uses internally, so both stacks share the same provider.
+/// Installing explicitly is idempotent: a second call (e.g. from a test harness)
+/// fails and is ignored.
+fn install_crypto_provider() {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+}
+
 fn main() {
-    let opts: opts::Opts = opts::Opts::from_args();
+    install_crypto_provider();
+
+    let mut opts: opts::Opts = opts::Opts::from_args();
+    if matches!(&opts.source, Source::Conda(_)) && opts.s3_config.s3_prefix_hint_mode.is_none() {
+        opts.s3_config.s3_prefix_hint_mode = Some("conda".to_string());
+    }
 
     // create runtime
     let mut runtime = tokio::runtime::Builder::new_multi_thread();

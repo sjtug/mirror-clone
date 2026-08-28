@@ -79,6 +79,98 @@ impl S3Backend {
         map.insert("clone-backend".to_string(), "s3-v1".to_string());
         map
     }
+
+    /// List objects directly under one directory and return its child directories.
+    /// Child prefixes are formatted as `/channel/platform/`, matching the shard
+    /// format used by the regular parallel listing path.
+    async fn list_directory(
+        &self,
+        additional_prefix: &str,
+        max_keys: i32,
+    ) -> Result<(Vec<SnapshotMeta>, Vec<String>)> {
+        let prefix_base = format!("{}/", self.config.prefix);
+        let prefix = format!("{}{}", self.config.prefix, additional_prefix);
+        let mut objects = vec![];
+        let mut children = vec![];
+        let mut continuation_token = None;
+
+        loop {
+            let mut req = self
+                .client
+                .list_objects_v2()
+                .bucket(self.config.bucket.clone())
+                .prefix(prefix.clone())
+                .delimiter('/')
+                .max_keys(max_keys);
+            if let Some(token) = continuation_token.take() {
+                req = req.continuation_token(token);
+            }
+            let resp = req
+                .send()
+                .await
+                .map_err(|err| s3_error("list objects (delimiter)", err))?;
+
+            for item in resp.contents() {
+                if let Some(key) = item.key()
+                    && let Some(key) = key.strip_prefix(&prefix_base)
+                {
+                    objects.push(SnapshotMeta {
+                        key: key.to_string(),
+                        size: item.size().and_then(|size| u64::try_from(size).ok()),
+                        ..Default::default()
+                    });
+                }
+            }
+            for common_prefix in resp.common_prefixes() {
+                if let Some(prefix) = common_prefix.prefix()
+                    && let Some(prefix) = prefix.strip_prefix(&self.config.prefix)
+                {
+                    children.push(prefix.to_string());
+                }
+            }
+
+            if let Some(token) = resp.next_continuation_token() {
+                continuation_token = Some(token.to_string());
+            } else {
+                break;
+            }
+        }
+
+        Ok((objects, children))
+    }
+
+    /// Discover Conda's `<channel>/<platform>/` directory layout. Objects directly
+    /// under the root or a channel are collected during delimiter discovery; each
+    /// platform is split into independent file-name-prefix listing shards.
+    async fn list_conda_shards(&self, max_keys: i32) -> Result<(Vec<SnapshotMeta>, Vec<String>)> {
+        let (mut objects, channels) = self.list_directory("/", max_keys).await?;
+        let mut futures = stream::iter(channels)
+            .map(|channel| async move { self.list_directory(&channel, max_keys).await })
+            .buffer_unordered(256);
+        let mut platform_shards = vec![];
+
+        while let Some(result) = futures.next().await {
+            let (mut direct_objects, mut channel_platforms) = result?;
+            objects.append(&mut direct_objects);
+            platform_shards.append(&mut channel_platforms);
+        }
+
+        // Package files within a platform directory are flat and use ASCII file
+        // names. Split once more by the first file-name byte so a large directory
+        // such as conda-forge/linux-64 does not remain a million-key sequential
+        // shard. Include every printable ASCII byte except '/', rather than only
+        // currently valid Conda package-name characters, to preserve legacy files.
+        let mut shards = Vec::with_capacity(platform_shards.len() * 94);
+        for platform in platform_shards {
+            for byte in b' '..=b'~' {
+                if byte != b'/' {
+                    shards.push(format!("{}{}", platform, char::from(byte)));
+                }
+            }
+        }
+
+        Ok((objects, shards))
+    }
 }
 
 fn s3_error(action: &str, error: impl std::fmt::Debug) -> Error {
@@ -102,18 +194,53 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
         let max_keys = i32::try_from(self.config.max_keys)
             .map_err(|_| Error::ConfigureError("s3 max keys does not fit i32".to_string()))?;
 
-        let prefix = match self.config.prefix_hint_mode.as_deref() {
+        let (mut snapshots, prefix) = match self.config.prefix_hint_mode.as_deref() {
             Some("pypi") => {
                 let mut prefix = vec![];
                 for i in 0..256 {
                     prefix.push(format!("/{:02x}", i));
                 }
-                prefix
+                (vec![], prefix)
             }
-            None => vec!["".to_string()],
+            // Conda mirrors are laid out as <prefix>/<channel>/<platform>/...
+            // (e.g. anaconda/cloud/conda-forge/noarch). Listing the whole prefix
+            // in one request stream is sequential and takes tens of minutes for
+            // millions of objects. Discover those directories using delimiter
+            // listings, then scan the independent platform shards in parallel.
+            Some("conda") => {
+                let (objects, shards) = self.list_conda_shards(max_keys).await?;
+                if objects.is_empty() && shards.is_empty() {
+                    warn!(
+                        logger,
+                        "conda prefix hint found no objects or directories; falling back to single-prefix listing"
+                    );
+                    (vec![], vec!["".to_string()])
+                } else {
+                    (objects, shards)
+                }
+            }
+            None => (vec![], vec!["".to_string()]),
             Some(other) => {
-                panic!("unsupported prefix hint mode {}", other);
+                return Err(Error::ConfigureError(format!(
+                    "unsupported prefix hint mode {}",
+                    other
+                )));
             }
+        };
+
+        for snapshot in &snapshots {
+            if let Some(size) = snapshot.size {
+                total_size.fetch_add(size, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+
+        // PyPI's 256 hash-prefix shards are intentionally scanned at full fan-out.
+        // Conda creates several thousand channel/platform/file-prefix shards; cap
+        // those at 64 to avoid tripping jCloud's response-throughput guard.
+        let listing_concurrency = if self.config.prefix_hint_mode.as_deref() == Some("conda") {
+            64
+        } else {
+            256
         };
 
         // List bucket
@@ -185,9 +312,7 @@ impl SnapshotStorage<SnapshotMeta> for S3Backend {
                     Ok::<_, Error>(snapshot)
                 }
             })
-            .buffer_unordered(256);
-
-        let mut snapshots = vec![];
+            .buffer_unordered(listing_concurrency);
 
         while let Some(snapshot) = futures.next().await {
             snapshots.append(&mut snapshot?);
