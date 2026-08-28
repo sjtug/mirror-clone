@@ -171,11 +171,99 @@ impl SourceStorage<SnapshotMeta, TransferURL> for Homebrew {
                 reqwest::header::ACCEPT,
                 "application/vnd.oci.image.index.v1+json",
             )
+            // We only need the final signed URL. Restrict the redirected request
+            // to one byte and consume it so the shared HTTP/2 connection remains
+            // reusable instead of resetting an abandoned full-body stream.
+            .header(reqwest::header::RANGE, "bytes=0-0")
             .send()
-            .await?;
-        if !resp.status().is_success() {
+            .timeout(Duration::from_secs(60))
+            .await
+            .into_result()?;
+        if resp.status() != reqwest::StatusCode::PARTIAL_CONTENT {
             return Err(Error::HTTPError(resp.status()));
         }
-        Ok(TransferURL(resp.url().as_str().to_string()))
+        let resolved_url = resp.url().as_str().to_string();
+        let body = resp
+            .bytes()
+            .timeout(Duration::from_secs(60))
+            .await
+            .into_result()?;
+        if body.len() != 1 {
+            return Err(Error::PipeError(format!(
+                "homebrew redirect probe returned {} bytes instead of one",
+                body.len()
+            )));
+        }
+        Ok(TransferURL(resolved_url))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use indicatif::ProgressBar;
+    use slog::{Discard, Logger, o};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    #[tokio::test]
+    async fn redirect_probe_requests_and_consumes_one_byte() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let final_url = format!("http://{address}/blob");
+        let server = tokio::spawn(async move {
+            for redirect in [Some(final_url), None] {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0; 1024];
+                while !request.ends_with(b"\r\n\r\n") {
+                    let read = socket.read(&mut buffer).await.unwrap();
+                    assert!(read > 0);
+                    request.extend_from_slice(&buffer[..read]);
+                }
+                let request = String::from_utf8(request).unwrap().to_ascii_lowercase();
+                assert!(request.contains("\r\nrange: bytes=0-0\r\n"));
+
+                if let Some(location) = redirect {
+                    socket
+                        .write_all(
+                            format!(
+                                "HTTP/1.1 307 Temporary Redirect\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            )
+                            .as_bytes(),
+                        )
+                        .await
+                        .unwrap();
+                } else {
+                    socket
+                        .write_all(
+                            b"HTTP/1.1 206 Partial Content\r\nContent-Length: 1\r\nConnection: close\r\n\r\nx",
+                        )
+                        .await
+                        .unwrap();
+                }
+            }
+        });
+
+        let key = "test.bottle.tar.gz".to_string();
+        let mut homebrew = Homebrew::new(HomebrewConfig {
+            api_base: String::new(),
+            arch: "all".to_string(),
+        });
+        homebrew
+            .url_mapping
+            .insert(key.clone(), format!("http://{address}/redirect"));
+        let mission = Mission {
+            progress: ProgressBar::hidden(),
+            client: reqwest::Client::new(),
+            logger: Logger::root(Discard, o!()),
+        };
+
+        let transfer_url = homebrew
+            .get_object(&SnapshotMeta::new(key), &mission)
+            .await
+            .unwrap();
+        assert_eq!(transfer_url.0, format!("http://{address}/blob"));
+        server.await.unwrap();
     }
 }
