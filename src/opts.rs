@@ -10,6 +10,7 @@ use crate::lean::elan::ElanConfig;
 use crate::pypi::Pypi as PypiConfig;
 use crate::rsync::Rsync as RsyncConfig;
 use crate::rustup::Rustup as RustupConfig;
+use crate::simple_repository_source::SimpleRepository as SimpleRepositoryConfig;
 use crate::{
     error::{Error, Result},
     s3::S3Config,
@@ -40,6 +41,11 @@ pub enum Source {
     Rustup(RustupConfig),
     #[structopt(about = "elan")]
     Elan(ElanConfig),
+    #[structopt(
+        name = "simple-repository",
+        about = "Metadata-only PyPA Simple Repository index"
+    )]
+    SimpleRepository(SimpleRepositoryConfig),
 }
 
 #[derive(Debug)]

@@ -6,6 +6,10 @@ version = "0.2.0"
 license = "Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+members = ["crates/pypa-simple"]
+resolver = "2"
+
 [dependencies]
 async-trait = "0.1"
 bytes = "1.0"
@@ -27,6 +31,7 @@ md-5 = "0.9"
 nom = "7.1"
 once_cell = "1.18"
 parse_link_header = "0.2"
+pypa-simple = { version = "0.1.0", path = "crates/pypa-simple" }
 rand = "0.8"
 regex = "1"
 reqwest = { version = "0.13", features = ["stream", "json"] }

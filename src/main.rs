@@ -48,6 +48,7 @@ mod rsync;
 mod rustup;
 mod s3;
 mod simple_diff_transfer;
+mod simple_repository_source;
 mod stream_pipe;
 mod timeout;
 mod traits;
@@ -145,6 +146,14 @@ fn main() {
     let mut opts: opts::Opts = opts::Opts::from_args();
     if matches!(&opts.source, Source::Conda(_)) && opts.s3_config.s3_prefix_hint_mode.is_none() {
         opts.s3_config.s3_prefix_hint_mode = Some("conda".to_string());
+    }
+    // Keep generated package indexes in a deletable namespace separate from
+    // on-demand artifact objects stored directly below the configured prefix.
+    if matches!(&opts.source, Source::SimpleRepository(_))
+        && matches!(&opts.target_type, Target::S3)
+        && let Some(prefix) = opts.s3_config.s3_prefix.as_mut()
+    {
+        *prefix = simple_repository_source::s3_index_prefix(prefix);
     }
 
     // create runtime
@@ -406,6 +415,9 @@ fn main() {
                 );
 
                 transfer!(opts, indexed, transfer_config, id_pipe!());
+            }
+            Source::SimpleRepository(source) => {
+                transfer!(opts, source, transfer_config, id_pipe!());
             }
         }
         Ok::<(), error::Error>(())
