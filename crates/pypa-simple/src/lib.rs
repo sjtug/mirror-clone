@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use url::Url;
 
 pub const HTML_CONTENT_TYPE: &str = "application/vnd.pypi.simple.v1+html; charset=utf-8";
@@ -22,6 +23,8 @@ pub enum IndexError {
     Url(#[from] url::ParseError),
     #[error("expected a repository or project index")]
     UnknownDocument,
+    #[error("invalid project name: {0}")]
+    InvalidProjectName(String),
 }
 
 pub type Result<T> = std::result::Result<T, IndexError>;
@@ -72,6 +75,9 @@ pub struct ProjectFile {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectIndex {
     pub name: String,
+    /// Published versions from JSON API 1.1 or later. HTML indexes do not
+    /// expose this information.
+    pub versions: Option<Vec<String>>,
     pub files: Vec<ProjectFile>,
 }
 
@@ -85,6 +91,21 @@ pub enum ParsedPage {
 pub struct RenderedIndex {
     pub html: String,
     pub json: String,
+}
+
+pub fn is_valid_project_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    bytes.first().is_some_and(u8::is_ascii_alphanumeric)
+        && bytes.last().is_some_and(u8::is_ascii_alphanumeric)
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(*byte, b'-' | b'_' | b'.'))
+}
+
+fn validate_project_name(name: &str) -> Result<()> {
+    is_valid_project_name(name)
+        .then_some(())
+        .ok_or_else(|| IndexError::InvalidProjectName(name.to_string()))
 }
 
 pub fn normalize_name(name: &str) -> String {
@@ -121,6 +142,15 @@ pub fn parse_page(page_url: &Url, body: &[u8], fallback_name: Option<&str>) -> R
 }
 
 pub fn render_root(projects: &[ProjectLink]) -> Result<RenderedIndex> {
+    for project in projects {
+        validate_project_name(&project.name)?;
+        validate_project_name(&project.normalized_name)?;
+        if normalize_name(&project.normalized_name) != project.normalized_name {
+            return Err(IndexError::InvalidProjectName(
+                project.normalized_name.clone(),
+            ));
+        }
+    }
     let mut projects = projects.to_vec();
     projects.sort_by(|a, b| a.normalized_name.cmp(&b.normalized_name));
     projects.dedup_by(|a, b| a.normalized_name == b.normalized_name);
@@ -136,7 +166,7 @@ pub fn render_root(projects: &[ProjectLink]) -> Result<RenderedIndex> {
         })
         .collect::<String>();
     let html = format!(
-        "<!DOCTYPE html>\n<html>\n  <head>\n    <meta name=\"pypi:repository-version\" content=\"1.1\">\n  </head>\n  <body>\n{links}  </body>\n</html>\n"
+        "<!DOCTYPE html>\n<html>\n  <head>\n    <meta name=\"pypi:repository-version\" content=\"1.0\">\n  </head>\n  <body>\n{links}  </body>\n</html>\n"
     );
     let json = serde_json::to_string(&json!({
         "meta": { "api-version": "1.0" },
@@ -146,9 +176,18 @@ pub fn render_root(projects: &[ProjectLink]) -> Result<RenderedIndex> {
 }
 
 pub fn render_project(project: &ProjectIndex) -> Result<RenderedIndex> {
+    validate_project_name(&project.name)?;
     let mut files = project.files.clone();
     files.sort_by(|a, b| a.filename.cmp(&b.filename));
     files.dedup_by(|a, b| a.filename == b.filename && a.url == b.url);
+    // PEP 700 requires both top-level versions and a size for every file in
+    // API 1.1. HTML-only sources cannot supply either reliably, so render a
+    // truthful 1.0 response unless the complete 1.1 data set is available.
+    let api_1_1 = project
+        .versions
+        .as_ref()
+        .is_some_and(|versions| files.is_empty() || !versions.is_empty())
+        && files.iter().all(|file| file.size.is_some());
 
     let links = files
         .iter()
@@ -187,7 +226,7 @@ pub fn render_project(project: &ProjectIndex) -> Result<RenderedIndex> {
         .collect::<String>();
     let name = html_escape::encode_text(&project.name);
     let html = format!(
-        "<!DOCTYPE html>\n<html>\n  <head>\n    <meta name=\"pypi:repository-version\" content=\"1.1\">\n    <title>Links for {name}</title>\n  </head>\n  <body>\n    <h1>Links for {name}</h1>\n{links}  </body>\n</html>\n"
+        "<!DOCTYPE html>\n<html>\n  <head>\n    <meta name=\"pypi:repository-version\" content=\"1.0\">\n    <title>Links for {name}</title>\n  </head>\n  <body>\n    <h1>Links for {name}</h1>\n{links}  </body>\n</html>\n"
     );
 
     let json_files = files
@@ -199,25 +238,35 @@ pub fn render_project(project: &ProjectIndex) -> Result<RenderedIndex> {
                 "hashes": file.hashes,
                 "yanked": yanked_json(file.yanked.as_deref()),
                 "core-metadata": metadata_json(file.core_metadata.as_ref()),
-                "data-dist-info-metadata": metadata_json(file.core_metadata.as_ref()),
             });
             if let Some(requires_python) = &file.requires_python {
                 value["requires-python"] = Value::String(requires_python.clone());
             }
-            if let Some(size) = file.size {
-                value["size"] = Value::from(size);
-            }
-            if let Some(upload_time) = &file.upload_time {
-                value["upload-time"] = Value::String(upload_time.clone());
+            if api_1_1 {
+                value["size"] = Value::from(file.size.expect("API 1.1 requires file size"));
+                if let Some(upload_time) = file
+                    .upload_time
+                    .as_deref()
+                    .filter(|value| valid_upload_time(value))
+                {
+                    value["upload-time"] = Value::String(upload_time.to_string());
+                }
             }
             value
         })
         .collect::<Vec<_>>();
-    let json = serde_json::to_string(&json!({
-        "meta": { "api-version": "1.1" },
-        "name": project.name,
+    let mut document = json!({
+        "meta": { "api-version": if api_1_1 { "1.1" } else { "1.0" } },
+        "name": normalize_name(&project.name),
         "files": json_files,
-    }))?;
+    });
+    if api_1_1 {
+        let mut versions = project.versions.clone().unwrap_or_default();
+        versions.sort();
+        versions.dedup();
+        document["versions"] = json!(versions);
+    }
+    let json = serde_json::to_string(&document)?;
     Ok(RenderedIndex { html, json })
 }
 
@@ -237,8 +286,12 @@ struct JsonFile {
     yanked: Option<Value>,
     #[serde(rename = "core-metadata")]
     core_metadata: Option<Value>,
+    #[serde(rename = "dist-info-metadata")]
+    dist_info_metadata: Option<Value>,
+    // Tolerate the briefly deployed non-standard PyPI spelling, but never
+    // emit it. PEP 714 defines `dist-info-metadata` as the legacy JSON key.
     #[serde(rename = "data-dist-info-metadata")]
-    data_dist_info_metadata: Option<Value>,
+    nonstandard_data_dist_info_metadata: Option<Value>,
     size: Option<u64>,
     #[serde(rename = "upload-time")]
     upload_time: Option<String>,
@@ -251,6 +304,7 @@ fn parse_json_page(page_url: &Url, body: &[u8]) -> Result<ParsedPage> {
         let projects = projects
             .into_iter()
             .map(|project| {
+                validate_project_name(&project.name)?;
                 let normalized = normalize_name(&project.name);
                 let url = page_url.join(&format!("{normalized}/"))?;
                 Ok(UpstreamProject {
@@ -267,6 +321,11 @@ fn parse_json_page(page_url: &Url, body: &[u8]) -> Result<ParsedPage> {
             .and_then(Value::as_str)
             .ok_or(IndexError::UnknownDocument)?
             .to_string();
+        validate_project_name(&name)?;
+        let versions: Option<Vec<String>> = value
+            .get("versions")
+            .map(|versions| serde_json::from_value(versions.clone()))
+            .transpose()?;
         let files: Vec<JsonFile> = serde_json::from_value(files.clone())?;
         let files = files
             .into_iter()
@@ -282,14 +341,20 @@ fn parse_json_page(page_url: &Url, body: &[u8]) -> Result<ParsedPage> {
                     requires_python: file.requires_python,
                     yanked: parse_yanked(file.yanked),
                     core_metadata: parse_metadata(
-                        file.core_metadata.or(file.data_dist_info_metadata),
+                        file.core_metadata
+                            .or(file.dist_info_metadata)
+                            .or(file.nonstandard_data_dist_info_metadata),
                     ),
                     size: file.size,
                     upload_time: file.upload_time,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        return Ok(ParsedPage::Project(ProjectIndex { name, files }));
+        return Ok(ParsedPage::Project(ProjectIndex {
+            name,
+            versions,
+            files,
+        }));
     }
     Err(IndexError::UnknownDocument)
 }
@@ -331,12 +396,16 @@ fn parse_html_page(page_url: &Url, body: &[u8], fallback_name: Option<&str>) -> 
             .collect::<Vec<_>>();
         projects.sort_by(|a, b| a.url.as_str().cmp(b.url.as_str()));
         projects.dedup_by(|a, b| a.url == b.url);
+        for project in &projects {
+            validate_project_name(&project.name)?;
+        }
         return Ok(ParsedPage::Repository(projects));
     }
 
     let name = fallback_name
         .ok_or(IndexError::UnknownDocument)?
         .to_string();
+    validate_project_name(&name)?;
     let files = anchors
         .into_iter()
         .filter_map(|anchor| {
@@ -375,7 +444,11 @@ fn parse_html_page(page_url: &Url, body: &[u8], fallback_name: Option<&str>) -> 
             })
         })
         .collect();
-    Ok(ParsedPage::Project(ProjectIndex { name, files }))
+    Ok(ParsedPage::Project(ProjectIndex {
+        name,
+        versions: None,
+        files,
+    }))
 }
 
 impl HtmlAnchor {
@@ -473,6 +546,20 @@ fn preferred_hash(hashes: &BTreeMap<String, String>) -> Option<(&str, &str)> {
         .map(|(name, digest)| (name.as_str(), digest.as_str()))
 }
 
+fn valid_upload_time(value: &str) -> bool {
+    let Some(timestamp) = value.strip_suffix('Z') else {
+        return false;
+    };
+    if let Some((_, fraction)) = timestamp.rsplit_once('.')
+        && (fraction.is_empty()
+            || fraction.len() > 6
+            || !fraction.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return false;
+    }
+    OffsetDateTime::parse(value, &Rfc3339).is_ok()
+}
+
 fn metadata_attribute(metadata: &CoreMetadata) -> String {
     match metadata {
         CoreMetadata::Available => "true".to_string(),
@@ -521,13 +608,14 @@ mod tests {
 
         let project = parse_page(
             &projects[0].url,
-            br#"{"meta":{"api-version":"1.4"},"name":"pyg-lib","files":[{"filename":"pyg.whl","url":"https://wheels.example/artifacts/abc/pyg.whl","hashes":{"sha256":"abc"},"core-metadata":{"sha256":"def"},"size":42}]}"#,
+            br#"{"meta":{"api-version":"1.4"},"name":"pyg-lib","versions":["1.0"],"files":[{"filename":"pyg.whl","url":"https://wheels.example/artifacts/abc/pyg.whl","hashes":{"sha256":"abc"},"core-metadata":{"sha256":"def"},"size":42}]}"#,
             Some("pyg-lib"),
         )
         .unwrap();
         let ParsedPage::Project(project) = project else {
             panic!("expected project");
         };
+        assert_eq!(project.versions, Some(vec!["1.0".to_string()]));
         assert_eq!(project.files[0].size, Some(42));
         assert_eq!(project.files[0].hashes["sha256"], "abc");
     }
@@ -554,7 +642,8 @@ mod tests {
     #[test]
     fn renders_matching_html_and_json() {
         let rendered = render_project(&ProjectIndex {
-            name: "demo".to_string(),
+            name: "Demo_Package".to_string(),
+            versions: Some(vec!["1.0".to_string(), "1.0".to_string()]),
             files: vec![ProjectFile {
                 filename: "demo-1.0.whl".to_string(),
                 url: "/wheels/demo-1.0.whl".to_string(),
@@ -563,13 +652,121 @@ mod tests {
                 yanked: None,
                 core_metadata: None,
                 size: Some(42),
-                upload_time: None,
+                upload_time: Some("2026-08-29T00:00:00.123456Z".to_string()),
             }],
         })
         .unwrap();
         assert!(rendered.html.contains("#sha256=abc"));
         let json: Value = serde_json::from_str(&rendered.json).unwrap();
+        assert_eq!(json["meta"]["api-version"], "1.1");
+        assert_eq!(json["name"], "demo-package");
+        assert_eq!(json["versions"], json!(["1.0"]));
         assert_eq!(json["files"][0]["url"], "/wheels/demo-1.0.whl");
         assert_eq!(json["files"][0]["size"], 42);
+        assert_eq!(
+            json["files"][0]["upload-time"],
+            "2026-08-29T00:00:00.123456Z"
+        );
+        assert!(json["files"][0].get("data-dist-info-metadata").is_none());
+    }
+
+    #[test]
+    fn renders_api_1_0_when_pep_700_fields_are_incomplete() {
+        let rendered = render_project(&ProjectIndex {
+            name: "demo".to_string(),
+            versions: None,
+            files: vec![ProjectFile {
+                filename: "demo-1.0.whl".to_string(),
+                url: "/wheels/demo-1.0.whl".to_string(),
+                hashes: BTreeMap::new(),
+                requires_python: None,
+                yanked: None,
+                core_metadata: None,
+                size: Some(42),
+                upload_time: Some("2026-08-29T00:00:00Z".to_string()),
+            }],
+        })
+        .unwrap();
+        let json: Value = serde_json::from_str(&rendered.json).unwrap();
+        assert_eq!(json["meta"]["api-version"], "1.0");
+        assert!(json.get("versions").is_none());
+        assert!(json["files"][0].get("size").is_none());
+        assert!(json["files"][0].get("upload-time").is_none());
+        assert!(
+            rendered
+                .html
+                .contains("name=\"pypi:repository-version\" content=\"1.0\"")
+        );
+
+        let missing_size = render_project(&ProjectIndex {
+            name: "demo".to_string(),
+            versions: Some(vec!["1.0".to_string()]),
+            files: vec![ProjectFile {
+                filename: "demo-1.0.whl".to_string(),
+                url: "/wheels/demo-1.0.whl".to_string(),
+                hashes: BTreeMap::new(),
+                requires_python: None,
+                yanked: None,
+                core_metadata: None,
+                size: None,
+                upload_time: None,
+            }],
+        })
+        .unwrap();
+        let json: Value = serde_json::from_str(&missing_size.json).unwrap();
+        assert_eq!(json["meta"]["api-version"], "1.0");
+        assert!(json.get("versions").is_none());
+    }
+
+    #[test]
+    fn omits_invalid_upload_time() {
+        let rendered = render_project(&ProjectIndex {
+            name: "demo".to_string(),
+            versions: Some(vec!["1.0".to_string()]),
+            files: vec![ProjectFile {
+                filename: "demo-1.0.whl".to_string(),
+                url: "/wheels/demo-1.0.whl".to_string(),
+                hashes: BTreeMap::new(),
+                requires_python: None,
+                yanked: None,
+                core_metadata: None,
+                size: Some(42),
+                upload_time: Some("2026-08-29T00:00:00.1234567Z".to_string()),
+            }],
+        })
+        .unwrap();
+        let json: Value = serde_json::from_str(&rendered.json).unwrap();
+        assert_eq!(json["meta"]["api-version"], "1.1");
+        assert!(json["files"][0].get("upload-time").is_none());
+    }
+
+    #[test]
+    fn rejects_invalid_project_names() {
+        let url = Url::parse("https://pypi.example/simple/").unwrap();
+        let error = parse_page(
+            &url,
+            "{\"meta\":{\"api-version\":\"1.0\"},\"projects\":[{\"name\":\"café\"}]}".as_bytes(),
+            None,
+        )
+        .unwrap_err();
+        assert!(matches!(error, IndexError::InvalidProjectName(_)));
+    }
+
+    #[test]
+    fn parses_standard_legacy_json_metadata_key() {
+        let url = Url::parse("https://pypi.example/demo/").unwrap();
+        let page = parse_page(
+            &url,
+            br#"{"meta":{"api-version":"1.0"},"name":"demo","files":[{"filename":"demo.whl","url":"demo.whl","hashes":{},"dist-info-metadata":true}]}"#,
+            Some("demo"),
+        )
+        .unwrap();
+        let ParsedPage::Project(project) = page else {
+            panic!("expected project");
+        };
+        assert_eq!(
+            project.files[0].core_metadata,
+            Some(CoreMetadata::Available)
+        );
     }
 }

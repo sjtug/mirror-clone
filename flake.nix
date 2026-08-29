@@ -180,7 +180,7 @@
               commonArgs
               // {
                 inherit cargoArtifacts;
-                cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+                cargoClippyExtraArgs = "--workspace --all-targets -- --deny warnings";
               }
             );
 
@@ -221,6 +221,7 @@
               commonArgs
               // {
                 inherit cargoArtifacts;
+                cargoNextestExtraArgs = "--workspace";
                 doCheck = true;
               }
             );
