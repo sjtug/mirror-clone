@@ -88,11 +88,19 @@ impl<Snapshot: Key + Metadata> TargetStorage<Snapshot, ByteStream> for FileBacke
         byte_stream: ByteStream,
         _mission: &Mission,
     ) -> Result<()> {
-        let path = byte_stream.object.use_file();
+        let mut object = byte_stream.object;
         let target: std::path::PathBuf = format!("{}/{}", self.base_path, snapshot.key()).into();
         let parent = target.parent().unwrap();
         tokio::fs::create_dir_all(parent).await?;
-        tokio::fs::rename(&path, &target).await?;
+        if object.path().is_some() {
+            let path = object.use_file();
+            tokio::fs::rename(&path, &target).await?;
+        } else {
+            let bytes = object
+                .take_bytes()
+                .ok_or_else(|| Error::PipeError("non-file object has no bytes".to_string()))?;
+            tokio::fs::write(&target, bytes).await?;
+        }
         if let Some(last_modified) = snapshot.last_modified() {
             filetime::set_file_mtime(&target, FileTime::from_unix_time(last_modified as i64, 0))?;
         }

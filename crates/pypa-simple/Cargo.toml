@@ -1,0 +1,15 @@
+[package]
+name = "pypa-simple"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+readme = "README.md"
+description = "Parse and render PyPA Simple Repository API indexes"
+
+[dependencies]
+html-escape = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tl = "0.7"
+url = "2"

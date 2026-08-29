@@ -7,8 +7,13 @@
 //! Currently, this is done by downloading files to local file system,
 //! provide it to target storage, and delete it on dropping file object.
 //! We may later refactor it to use in-memory stream or direct reqwest stream.
+//!
+//! `ByteObject` also has a `Bytes` variant for in-memory bodies (e.g. generated
+//! HTML or remote responses collected into `bytes::Bytes`), avoiding temp-file
+//! buffering for sources that don't need disk-backed rewindability.
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use chrono::DateTime;
 
 use crate::common::{Mission, SnapshotConfig, TransferURL};
@@ -25,6 +30,9 @@ pub enum ByteObject {
         file: Option<tokio::fs::File>,
         path: Option<std::path::PathBuf>,
     },
+    /// In-memory body (generated HTML, or a remote response collected into
+    /// `bytes::Bytes`).  No temp file is created.
+    Bytes(Option<Bytes>),
 }
 
 impl ByteObject {
@@ -34,12 +42,25 @@ impl ByteObject {
                 drop(file.take().unwrap());
                 path.take().unwrap()
             }
+            ByteObject::Bytes(_) => {
+                panic!("use_file called on ByteObject::Bytes");
+            }
         }
     }
 
     pub fn path(&self) -> Option<&std::path::Path> {
         match self {
             ByteObject::LocalFile { path, .. } => path.as_deref(),
+            ByteObject::Bytes(_) => None,
+        }
+    }
+
+    /// Take the in-memory `Bytes` out of this object, leaving it empty.
+    /// Returns `None` if this is a `LocalFile` or an already-emptied `Bytes`.
+    pub fn take_bytes(&mut self) -> Option<Bytes> {
+        match self {
+            ByteObject::Bytes(opt) => opt.take(),
+            _ => None,
         }
     }
 }
@@ -56,6 +77,7 @@ impl Drop for ByteObject {
                     }
                 }
             }
+            ByteObject::Bytes(_) => {}
         }
     }
 }

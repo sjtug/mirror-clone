@@ -2334,6 +2334,7 @@ dependencies = [
  "nom",
  "once_cell",
  "parse_link_header",
+ "pypa-simple",
  "rand 0.8.8",
  "regex",
  "reqwest",
@@ -2617,6 +2618,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "pypa-simple"
+version = "0.1.0"
+dependencies = [
+ "html-escape",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tl",
+ "url",
 ]
 
 [[package]]
@@ -3774,6 +3787,12 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
+name = "tl"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b130bd8a58c163224b44e217b4239ca7b927d82bf6cc2fea1fc561d15056e3f7"
 
 [[package]]
 name = "tokio"
