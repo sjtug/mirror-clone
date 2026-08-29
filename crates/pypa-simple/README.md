@@ -2,7 +2,9 @@
 
 `pypa-simple` is a vendor-neutral parser and renderer for the PyPA Simple
 Repository API. It accepts PEP 503 HTML and PEP 691 JSON and emits matching HTML
-and JSON views from one model.
+and JSON views from one model. Generated project JSON advertises API 1.1 only
+when the source supplies PEP 700 `versions` and a `size` for every file;
+otherwise it emits a complete API 1.0 representation.
 
 The mirror-clone `simple-repository` source supplies crawling, URL-prefix
 rewriting, and storage. It follows nested repository pages by content, so both ordinary
@@ -21,7 +23,7 @@ mirror-clone --target-type s3 --s3-prefix pytorch-wheels \
 
 # Astral: JSON-only channel indexes below an HTML channel root
 mirror-clone --target-type s3 --s3-prefix astral-wheels \
-  simple-repository --index-base https://wheels.astral.sh/simple \
+  simple-repository --index-base https://wheels.astral.sh/simple/ \
   --rewrite-url-prefix https://wheels.astral.sh/artifacts/=/astral-wheels/artifacts/
 
 # NVIDIA: HTML root/project pages with relative artifact links

@@ -340,6 +340,7 @@ mod tests {
     fn longest_url_prefix_wins() {
         let mut project = ProjectIndex {
             name: "demo".to_string(),
+            versions: None,
             files: vec![pypa_simple::ProjectFile {
                 filename: "demo.whl".to_string(),
                 url: "https://host/files/cpu/demo.whl".to_string(),
@@ -443,6 +444,10 @@ mod tests {
             .objects
             .get("cu132/flash-attn/index.v1_json")
             .unwrap();
-        assert!(String::from_utf8_lossy(&project.body).contains(r#""url":"/wheels/flash.whl""#));
+        let project: serde_json::Value = serde_json::from_slice(&project.body).unwrap();
+        assert_eq!(project["meta"]["api-version"], "1.0");
+        assert_eq!(project["files"][0]["url"], "/wheels/flash.whl");
+        assert!(project.get("versions").is_none());
+        assert!(project["files"][0].get("size").is_none());
     }
 }
