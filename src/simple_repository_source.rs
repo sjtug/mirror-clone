@@ -99,11 +99,19 @@ pub fn s3_index_prefix(prefix: &str) -> String {
     }
 }
 
-async fn fetch_page(client: &Client, url: &Url) -> Result<Option<Bytes>> {
+enum PageFetchResult {
+    Found(Bytes),
+    Missing,
+    Forbidden,
+}
+
+async fn fetch_page(client: &Client, url: &Url) -> Result<PageFetchResult> {
     tokio::time::timeout(Duration::from_secs(60), async {
         let response = client.get(url.clone()).send().await?;
-        if matches!(response.status().as_u16(), 404 | 410) {
-            return Ok(None);
+        match response.status().as_u16() {
+            404 | 410 => return Ok(PageFetchResult::Missing),
+            403 => return Ok(PageFetchResult::Forbidden),
+            _ => {}
         }
         if !response.status().is_success() {
             return Err(Error::PipeError(format!(
@@ -111,7 +119,7 @@ async fn fetch_page(client: &Client, url: &Url) -> Result<Option<Bytes>> {
                 response.status()
             )));
         }
-        Ok(Some(response.bytes().await?))
+        Ok(PageFetchResult::Found(response.bytes().await?))
     })
     .await
     .map_err(|_| Error::TimeoutError(()))?
@@ -209,9 +217,19 @@ impl SnapshotStorage<SnapshotPath> for SimpleRepository {
             .map_err(|error| Error::ConfigureError(format!("invalid index base URL: {error}")))?;
 
         info!(logger, "fetching package repository index"; "url" => root_url.as_str());
-        let root_body = fetch_page(&client, &root_url).await?.ok_or_else(|| {
-            Error::PipeError(format!("package repository index not found: {root_url}"))
-        })?;
+        let root_body = match fetch_page(&client, &root_url).await? {
+            PageFetchResult::Found(body) => body,
+            PageFetchResult::Missing => {
+                return Err(Error::PipeError(format!(
+                    "package repository index not found: {root_url}"
+                )));
+            }
+            PageFetchResult::Forbidden => {
+                return Err(Error::PipeError(format!(
+                    "package repository index is forbidden (403): {root_url}"
+                )));
+            }
+        };
         let ParsedPage::Repository(root_projects) = parse_index_page(&root_url, &root_body, None)?
         else {
             return Err(Error::PipeError(format!(
@@ -235,24 +253,34 @@ impl SnapshotStorage<SnapshotPath> for SimpleRepository {
                 let progress = progress.clone();
                 async move {
                     progress.set_message(&project.name);
-                    let body = fetch_page(&client, &project.url).await?;
-                    let page = body
-                        .as_deref()
-                        .map(|body| parse_index_page(&project.url, body, Some(&project.name)))
-                        .transpose()?;
+                    let result = fetch_page(&client, &project.url).await;
                     progress.inc(1);
-                    Ok::<_, Error>((project, page))
+                    result.map(|result| (project, result))
                 }
             }))
             .buffer_unordered(config.concurrent_resolve);
 
             let mut rendered_projects = Vec::new();
             while let Some(result) = children.next().await {
-                let (upstream_project, page) = result?;
-                let Some(page) = page else {
-                    warn!(logger, "skipping vanished package index"; "url" => upstream_project.url.as_str());
-                    continue;
+                let (upstream_project, result) = result?;
+                let body = match result {
+                    PageFetchResult::Found(body) => body,
+                    PageFetchResult::Missing => {
+                        warn!(logger, "skipping vanished package index"; "url" => upstream_project.url.as_str());
+                        continue;
+                    }
+                    PageFetchResult::Forbidden => {
+                        warn!(
+                            logger,
+                            "skipping forbidden package index; fix upstream access or remove it from the parent listing";
+                            "url" => upstream_project.url.as_str(),
+                            "status" => 403
+                        );
+                        continue;
+                    }
                 };
+                let page =
+                    parse_index_page(&upstream_project.url, &body, Some(&upstream_project.name))?;
                 match page {
                     ParsedPage::Project(mut project) => {
                         rewrite_project(&mut project, &self.rewrites);
@@ -335,6 +363,70 @@ mod tests {
     use slog::{Discard, Logger, o};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+    use tokio::task::JoinHandle;
+
+    async fn spawn_fixture_server(
+        routes: Vec<(&'static str, u16, &'static str)>,
+    ) -> (String, JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let request_count = routes.len();
+        let routes = routes
+            .into_iter()
+            .map(|(path, status, body)| (path, (status, body)))
+            .collect::<HashMap<_, _>>();
+        let server = tokio::spawn(async move {
+            for _ in 0..request_count {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0; 2048];
+                while !request.ends_with(b"\r\n\r\n") {
+                    let read = socket.read(&mut buffer).await.unwrap();
+                    assert!(read > 0);
+                    request.extend_from_slice(&buffer[..read]);
+                }
+                let request = String::from_utf8(request).unwrap();
+                let path = request
+                    .lines()
+                    .next()
+                    .unwrap()
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap();
+                let (status, body) = routes
+                    .get(path)
+                    .unwrap_or_else(|| panic!("unexpected fixture request: {path}"));
+                socket
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 {status} Fixture\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        )
+                        .as_bytes(),
+                    )
+                    .await
+                    .unwrap();
+            }
+        });
+        (format!("http://{address}/simple"), server)
+    }
+
+    fn test_source(index_base: String) -> SimpleRepository {
+        SimpleRepository {
+            index_base,
+            rewrites: vec![],
+            max_depth: 3,
+            objects: HashMap::new(),
+        }
+    }
+
+    fn test_mission() -> Mission {
+        Mission {
+            progress: ProgressBar::hidden(),
+            client: Client::new(),
+            logger: Logger::root(Discard, o!()),
+        }
+    }
 
     #[test]
     fn longest_url_prefix_wins() {
@@ -449,5 +541,95 @@ mod tests {
         assert_eq!(project["files"][0]["url"], "/wheels/flash.whl");
         assert!(project.get("versions").is_none());
         assert!(project["files"][0].get("size").is_none());
+    }
+
+    #[tokio::test]
+    async fn snapshot_skips_forbidden_child_but_keeps_valid_projects() {
+        let (index_base, server) = spawn_fixture_server(vec![
+            (
+                "/simple/",
+                200,
+                r#"<a href="valid/">valid</a><a href="forbidden/">forbidden</a>"#,
+            ),
+            (
+                "/simple/valid/",
+                200,
+                r#"<a href="https://files.example/valid.whl">valid.whl</a>"#,
+            ),
+            ("/simple/forbidden/", 403, "forbidden"),
+        ])
+        .await;
+        let mut source = test_source(index_base);
+
+        let snapshot = source
+            .snapshot(
+                test_mission(),
+                &SnapshotConfig {
+                    concurrent_resolve: 2,
+                },
+            )
+            .await
+            .unwrap();
+        server.await.unwrap();
+
+        let keys = snapshot
+            .into_iter()
+            .map(|snapshot| snapshot.0)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            keys,
+            vec![
+                "index.v1_html",
+                "index.v1_json",
+                "valid/index.v1_html",
+                "valid/index.v1_json",
+            ]
+        );
+        assert!(keys.iter().all(|key| !key.contains("forbidden")));
+        let root: serde_json::Value =
+            serde_json::from_slice(&source.objects.get("index.v1_json").unwrap().body).unwrap();
+        assert_eq!(root["projects"], serde_json::json!([{"name": "valid"}]));
+    }
+
+    #[tokio::test]
+    async fn snapshot_rejects_forbidden_root() {
+        let (index_base, server) = spawn_fixture_server(vec![("/simple/", 403, "forbidden")]).await;
+        let mut source = test_source(index_base);
+
+        let error = source
+            .snapshot(
+                test_mission(),
+                &SnapshotConfig {
+                    concurrent_resolve: 1,
+                },
+            )
+            .await
+            .unwrap_err();
+        server.await.unwrap();
+
+        assert!(error.to_string().contains("403"), "{error:?}");
+    }
+
+    #[tokio::test]
+    async fn snapshot_rejects_server_error_from_child() {
+        let (index_base, server) = spawn_fixture_server(vec![
+            ("/simple/", 200, r#"<a href="broken/">broken</a>"#),
+            ("/simple/broken/", 503, "unavailable"),
+        ])
+        .await;
+        let mut source = test_source(index_base);
+
+        let error = source
+            .snapshot(
+                test_mission(),
+                &SnapshotConfig {
+                    concurrent_resolve: 1,
+                },
+            )
+            .await
+            .unwrap_err();
+        server.await.unwrap();
+
+        assert!(error.to_string().contains("503"), "{error:?}");
     }
 }
