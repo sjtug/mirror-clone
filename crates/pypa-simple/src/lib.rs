@@ -475,18 +475,18 @@ fn parse_anchors(document: &str) -> Vec<HtmlAnchor> {
                 return None;
             }
             let attributes = tag.attributes();
-            let href = attributes
-                .get("href")
-                .flatten()
-                .map(|value| value.as_utf8_str().into_owned())?;
+            let href = attributes.get("href").flatten().map(|value| {
+                let value = value.as_utf8_str();
+                html_escape::decode_html_entities(&value).into_owned()
+            })?;
             let attrs = attributes
                 .iter()
                 .filter(|(name, _)| name.as_ref() != "href")
                 .map(|(name, value)| {
-                    (
-                        name.as_ref().to_ascii_lowercase(),
-                        value.as_ref().map(|value| value.clone().into_owned()),
-                    )
+                    let value = value
+                        .as_ref()
+                        .map(|value| html_escape::decode_html_entities(value).into_owned());
+                    (name.as_ref().to_ascii_lowercase(), value)
                 })
                 .collect();
             Some(HtmlAnchor {
@@ -637,6 +637,33 @@ mod tests {
             "https://pypi.example/nvidia-cublas/nvidia_cublas-1.0.whl"
         );
         assert_eq!(project.files[0].hashes["sha256"], "abc");
+    }
+
+    #[test]
+    fn decodes_html_attribute_entities_before_rendering() {
+        let url = Url::parse("https://pypi.example/demo/").unwrap();
+        let page = parse_page(
+            &url,
+            br#"<a href="demo-1.0.whl?download=1&amp;mirror=1#sha256=abc" data-requires-python="&gt;=3.8" data-yanked="use &quot;new&quot;">demo-1.0.whl</a>"#,
+            Some("demo"),
+        )
+        .unwrap();
+        let ParsedPage::Project(project) = page else {
+            panic!("expected project");
+        };
+        assert_eq!(project.files[0].requires_python.as_deref(), Some(">=3.8"));
+        assert_eq!(project.files[0].yanked.as_deref(), Some("use \"new\""));
+        assert_eq!(
+            project.files[0].url,
+            "https://pypi.example/demo/demo-1.0.whl?download=1&mirror=1"
+        );
+
+        let rendered = render_project(&project).unwrap();
+        assert!(rendered.html.contains(r#"data-requires-python="&gt;=3.8""#));
+        assert!(!rendered.html.contains("&amp;gt;=3.8"));
+        let json: Value = serde_json::from_str(&rendered.json).unwrap();
+        assert_eq!(json["files"][0]["requires-python"], ">=3.8");
+        assert_eq!(json["files"][0]["yanked"], "use \"new\"");
     }
 
     #[test]
