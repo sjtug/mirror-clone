@@ -83,6 +83,33 @@ struct GeneratedObject {
     content_type: &'static str,
 }
 
+/// Shares immutable rendered bodies that appear at multiple object keys.
+///
+/// Nested repositories commonly repeat the same project index under many
+/// channels, so retaining one allocation per key can make the logical output
+/// size become the process's resident memory.
+#[derive(Debug, Default)]
+struct RenderedBodyPool {
+    bodies: HashMap<Bytes, ()>,
+    logical_bytes: u64,
+    unique_bytes: u64,
+}
+
+impl RenderedBodyPool {
+    fn intern(&mut self, body: String) -> Bytes {
+        let body = Bytes::from(body);
+        self.logical_bytes += body.len() as u64;
+        match self.bodies.entry(body.clone()) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.key().clone(),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                self.unique_bytes += body.len() as u64;
+                entry.insert(());
+                body
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 struct IndexNode {
     prefix: String,
@@ -184,20 +211,21 @@ fn object_key(prefix: &str, filename: &str) -> String {
 
 fn insert_rendered(
     objects: &mut HashMap<String, GeneratedObject>,
+    body_pool: &mut RenderedBodyPool,
     prefix: &str,
     rendered: RenderedIndex,
 ) {
     objects.insert(
         object_key(prefix, "index.v1_html"),
         GeneratedObject {
-            body: Bytes::from(rendered.html),
+            body: body_pool.intern(rendered.html),
             content_type: HTML_CONTENT_TYPE,
         },
     );
     objects.insert(
         object_key(prefix, "index.v1_json"),
         GeneratedObject {
-            body: Bytes::from(rendered.json),
+            body: body_pool.intern(rendered.json),
             content_type: JSON_CONTENT_TYPE,
         },
     );
@@ -238,6 +266,7 @@ impl SnapshotStorage<SnapshotPath> for SimpleRepository {
         };
 
         let mut objects = HashMap::new();
+        let mut body_pool = RenderedBodyPool::default();
         let mut visited_indexes = HashSet::from([root_url.to_string()]);
         let mut indexes = VecDeque::from([IndexNode {
             prefix: String::new(),
@@ -287,6 +316,7 @@ impl SnapshotStorage<SnapshotPath> for SimpleRepository {
                         let normalized = normalize_name(&project.name);
                         insert_rendered(
                             &mut objects,
+                            &mut body_pool,
                             &join_prefix(&index.prefix, &normalized),
                             render_project(&project).map_err(|error| {
                                 Error::PipeError(format!("failed to render project index: {error}"))
@@ -317,6 +347,7 @@ impl SnapshotStorage<SnapshotPath> for SimpleRepository {
 
             insert_rendered(
                 &mut objects,
+                &mut body_pool,
                 &index.prefix,
                 render_root(&rendered_projects).map_err(|error| {
                     Error::PipeError(format!("failed to render repository index: {error}"))
@@ -332,7 +363,13 @@ impl SnapshotStorage<SnapshotPath> for SimpleRepository {
         snapshot.sort_by(|a, b| a.0.cmp(&b.0));
         self.objects = objects;
         progress.finish_with_message("done");
-        info!(logger, "generated {} package index objects", snapshot.len());
+        info!(
+            logger,
+            "generated {} package index objects", snapshot.len();
+            "logical_bytes" => body_pool.logical_bytes,
+            "unique_bytes" => body_pool.unique_bytes,
+            "unique_bodies" => body_pool.bodies.len(),
+        );
         Ok(snapshot)
     }
 
@@ -541,6 +578,42 @@ mod tests {
         assert_eq!(project["files"][0]["url"], "/wheels/flash.whl");
         assert!(project.get("versions").is_none());
         assert!(project["files"][0].get("size").is_none());
+    }
+
+    #[tokio::test]
+    async fn snapshot_interns_duplicate_rendered_bodies() {
+        let project = r#"<a href="https://files.example/demo.whl">demo.whl</a>"#;
+        let (index_base, server) = spawn_fixture_server(vec![
+            (
+                "/simple/",
+                200,
+                r#"<a href="cpu/">cpu</a><a href="nightly/">nightly</a>"#,
+            ),
+            ("/simple/cpu/", 200, r#"<a href="demo/">demo</a>"#),
+            ("/simple/cpu/demo/", 200, project),
+            ("/simple/nightly/", 200, r#"<a href="demo/">demo</a>"#),
+            ("/simple/nightly/demo/", 200, project),
+        ])
+        .await;
+        let mut source = test_source(index_base);
+
+        source
+            .snapshot(
+                test_mission(),
+                &SnapshotConfig {
+                    concurrent_resolve: 2,
+                },
+            )
+            .await
+            .unwrap();
+        server.await.unwrap();
+
+        for filename in ["index.v1_html", "index.v1_json"] {
+            let cpu = &source.objects[&format!("cpu/demo/{filename}")].body;
+            let nightly = &source.objects[&format!("nightly/demo/{filename}")].body;
+            assert_eq!(cpu, nightly);
+            assert_eq!(cpu.as_ptr(), nightly.as_ptr());
+        }
     }
 
     #[tokio::test]
